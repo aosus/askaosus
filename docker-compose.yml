@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  askaosus-bot:
+    build: .
+    container_name: askaosus-matrix-bot
+    restart: unless-stopped
+    volumes:
+      - askaosus-data:/app/data
+      - askaosus-logs:/app/logs
+    environment:
+      # Python configuration
+      - PYTHONUNBUFFERED=1
+      
+      # Matrix Configuration
+      - MATRIX_HOMESERVER_URL=${MATRIX_HOMESERVER_URL:-https://matrix.org}
+      - MATRIX_USER_ID=${MATRIX_USER_ID:-@askaosus:matrix.org}
+      - MATRIX_PASSWORD=${MATRIX_PASSWORD}
+      - MATRIX_DEVICE_NAME=${MATRIX_DEVICE_NAME:-askaosus-python}
+      - MATRIX_STORE_PATH=/app/data/matrix_store
+      
+      # Discourse Configuration
+      - DISCOURSE_BASE_URL=${DISCOURSE_BASE_URL:-https://discourse.aosus.org}
+      - DISCOURSE_API_KEY=${DISCOURSE_API_KEY}
+      - DISCOURSE_USERNAME=${DISCOURSE_USERNAME}
+      
+      # LLM Configuration
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_MODEL=${LLM_MODEL:-gpt-4}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-500}
+      - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.7}
+      
+      # Bot Behavior Configuration
+      - BOT_RATE_LIMIT_SECONDS=${BOT_RATE_LIMIT_SECONDS:-1.0}
+      - BOT_MAX_SEARCH_RESULTS=${BOT_MAX_SEARCH_RESULTS:-5}
+      - BOT_DEBUG=${BOT_DEBUG:-false}
+      
+      # Logging Configuration
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    networks:
+      - askaosus-network
+
+networks:
+  askaosus-network:
+    driver: bridge
+
+volumes:
+  askaosus-data:
+  askaosus-logs:

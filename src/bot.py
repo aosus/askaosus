@@ -260,7 +260,7 @@ class AskaosusBot:
             
             if not search_results:
                 logger.warning("No search results found from Discourse")
-                return "عذراً، لم أتمكن من العثور على إجابة مناسبة في منتدى آسوس. يرجى المحاولة بصياغة مختلفة أو زيارة المنتدى مباشرة: https://discourse.aosus.org"
+                return "عذراً، لم أتمكن من العثور على إجابة مناسبة في مجتمع أسس. يرجى المحاولة بصياغة مختلفة أو زيارة المجتمع مباشرة: https://discourse.aosus.org"
             
             logger.info(f"Found {len(search_results)} results, generating LLM response...")
             
@@ -272,4 +272,4 @@ class AskaosusBot:
             
         except Exception as e:
             logger.error(f"Error processing question: {e}", exc_info=True)
-            return "عذراً، حدث خطأ أثناء البحث عن إجابة. يرجى المحاولة مرة أخرى لاحقاً أو زيارة منتدى آسوس مباشرة: https://discourse.aosus.org"
+            return "عذراً، حدث خطأ أثناء البحث عن إجابة. يرجى المحاولة مرة أخرى لاحقاً أو زيارة مجتمع أسس مباشرة: https://discourse.aosus.org"

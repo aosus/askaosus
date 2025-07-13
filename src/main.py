@@ -4,6 +4,10 @@ import signal
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+# Load .env file without overwriting existing environment variables
+load_dotenv(override=False)
+
 from .bot import AskaosusBot
 from .config import Config
 
@@ -21,10 +25,14 @@ logger = logging.getLogger(__name__)
 
 
 def signal_handler(bot: AskaosusBot):
-    """Handle shutdown signals gracefully."""
+    """Handle shutdown signals gracefully by shutting down the bot and stopping the event loop."""
     def handler(signum, frame):
         logger.info(f"Received signal {signum}, shutting down...")
-        asyncio.create_task(bot.shutdown())
+        # Schedule bot shutdown
+        loop = asyncio.get_event_loop()
+        loop.create_task(bot.shutdown())
+        # Stop the event loop to exit main cleanly
+        loop.stop()
     return handler
 
 

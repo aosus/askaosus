@@ -368,7 +368,7 @@ class DiscourseSearcher:
             # Get excerpt
             excerpt = topic_data.get("excerpt", "")
             if not excerpt:
-                excerpt = "موضوع في منتدى آسوس"
+                excerpt = "موضوع في مجتمع أسس"
             
             # Construct URL
             url = f"{self.base_url}/t/{topic_id}"

@@ -80,11 +80,14 @@ class LLMClient:
 
 أجب على السؤال باللغة العربية بناءً على المحتوى المقدم. اجعل الإجابة مختصرة ومفيدة، واذكر رابط المنشور الأكثر صلة.
 """
-            
             messages = [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": user_message}
             ]
+            # Log the LLM input messages
+            logger.info("LLM input messages:")
+            for msg in messages:
+                logger.info(f"  {msg['role']}: {msg['content']}")
             
             # Log the input to LLM
             logger.info(f"Sending request to LLM provider: {self.config.llm_provider}")
@@ -103,6 +106,8 @@ class LLMClient:
             # Log the response
             answer = response.choices[0].message.content.strip()
             logger.info(f"LLM response received - length: {len(answer)} characters")
+            # Log LLM output
+            logger.info(f"LLM output: {answer}")
             logger.debug(f"Raw LLM response: {answer}")
             
             # Log usage if available

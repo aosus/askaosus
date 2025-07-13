@@ -257,6 +257,9 @@ class AskaosusBot:
             # Search Discourse for relevant posts
             logger.info("Starting Discourse search...")
             search_results = await self.discourse_searcher.search(question)
+            # Log links to all found posts
+            for i, post in enumerate(search_results, start=1):
+                logger.info(f"Found Discourse post {i}: {post.title} - {post.url}")
             
             if not search_results:
                 logger.warning("No search results found from Discourse")

@@ -13,7 +13,9 @@ class Config:
         self.matrix_user_id = self._get_required_env("MATRIX_USER_ID")
         self.matrix_password = self._get_required_env("MATRIX_PASSWORD")
         self.matrix_device_name = os.getenv("MATRIX_DEVICE_NAME", "askaosus-python")
-        self.matrix_store_path = os.getenv("MATRIX_STORE_PATH", "/app/data/matrix_store")
+        # Default to local data directory for session persistence in dev
+        default_store = os.path.join(os.getcwd(), "data", "matrix_store")
+        self.matrix_store_path = os.getenv("MATRIX_STORE_PATH", default_store)
         
         # Discourse configuration
         self.discourse_base_url = os.getenv("DISCOURSE_BASE_URL", "https://discourse.aosus.org")

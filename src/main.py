@@ -28,11 +28,8 @@ def signal_handler(bot: AskaosusBot):
     """Handle shutdown signals gracefully by shutting down the bot and stopping the event loop."""
     def handler(signum, frame):
         logger.info(f"Received signal {signum}, shutting down...")
-        # Schedule bot shutdown
-        loop = asyncio.get_event_loop()
-        loop.create_task(bot.shutdown())
-        # Stop the event loop to exit main cleanly
-        loop.stop()
+        # Schedule bot shutdown; sync_forever will exit when client is closed
+        asyncio.get_event_loop().create_task(bot.shutdown())
     return handler
 
 

@@ -93,24 +93,42 @@ class AskaosusBot:
         if self.is_running:
             logger.info("Shutting down bot...")
             self.is_running = False
+            # Save session store to preserve login state
+            # Attempt to save session store if supported
+            save_fn = getattr(self.matrix_client, "save_store", None)
+            if callable(save_fn):
+                try:
+                    save_fn()
+                    logger.info("Session store saved successfully")
+                except Exception as e:
+                    logger.warning(f"Failed to save session store: {e}")
             await self.matrix_client.close()
             logger.info("Bot shutdown complete")
     
     async def _login(self):
         """Login to Matrix server."""
-        # Try to restore session first
-        if Path(self.config.matrix_store_path).exists():
-            logger.info("Attempting to restore previous session...")
+        # Attempt manual session restore from JSON
+        # Ensure the session store directory exists
+        store_dir = Path(self.config.matrix_store_path)
+        store_dir.mkdir(parents=True, exist_ok=True)
+        session_file = store_dir / "session.json"
+        # Attempt to restore session from JSON file inside matrix_store
+        if session_file.exists():
             try:
-                # Load existing session
-                self.matrix_client.load_store()
-                
-                # Check if we're already logged in
-                if self.matrix_client.logged_in:
-                    logger.info("Restored previous session successfully")
+                import json
+                data = json.loads(session_file.read_text(encoding="utf-8"))
+                self.matrix_client.user_id = data.get("user_id")
+                self.matrix_client.access_token = data.get("access_token")
+                self.matrix_client.device_id = data.get("device_id")
+                if self.matrix_client.user_id and self.matrix_client.access_token:
+                    logger.info("Restored Matrix session from session.json, skipping login")
                     return
             except Exception as e:
-                logger.warning(f"Could not restore session: {e}")
+                logger.warning(f"Failed to restore session from JSON: {e}")
+        else:
+            # Ensure store directory exists
+            store_dir.mkdir(parents=True, exist_ok=True)
+            logger.info("No session.json found, will login and create new session file")
         
         # Login with password
         logger.info("Logging in with password...")
@@ -121,6 +139,19 @@ class AskaosusBot:
         
         if isinstance(response, LoginResponse):
             logger.info(f"Logged in as {self.config.matrix_user_id}")
+            # Save session credentials to JSON for future restores
+            try:
+                import json
+                session_file.write_text(
+                    json.dumps({
+                        "user_id": self.matrix_client.user_id,
+                        "access_token": self.matrix_client.access_token,
+                        "device_id": self.matrix_client.device_id,
+                    }), encoding="utf-8"
+                )
+                logger.info("Session saved to session.json")
+            except Exception as e:
+                logger.warning(f"Failed to write session.json: {e}")
         else:
             logger.error(f"Login failed: {response}")
             raise Exception(f"Login failed: {response}")

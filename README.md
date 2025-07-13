@@ -22,10 +22,13 @@ A Python Matrix bot that searches the Aosus Discourse forum to answer Arabic que
 
 ## Development
 
-For development with hot reloading:
+For development with hot reloading (no Docker needed):
 
 ```bash
-docker compose -f docker-compose.dev.yml up --watch
+# Install dependencies including dev support
+pip install -r requirements.txt
+# Run the bot with auto-reload on file changes
+python dev.py
 ```
 
 ## How It Works

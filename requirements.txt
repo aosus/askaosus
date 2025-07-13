@@ -5,3 +5,5 @@ openai>=1.0.0
 
 # Utility dependencies  
 python-dotenv>=1.0.0
+# Development dependency for auto-reload
+watchgod>=0.7.0

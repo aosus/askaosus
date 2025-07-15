@@ -176,8 +176,7 @@ class DiscourseSearcher:
             results = await self._perform_search(term)
             all_results.extend(self._deduplicate_results(results, seen_ids))
         
-        # Sort by relevance (likes, then reply count)
-        all_results.sort(key=lambda p: (p.like_count, p.reply_count), reverse=True)
+        # Preserve relevance order as returned by Discourse API (no manual sorting)
         
         # Return top results
         final_results = all_results[:self.config.bot_max_search_results]
@@ -313,8 +312,7 @@ class DiscourseSearcher:
                     if post:
                         posts.append(post)
             
-            # Sort by relevance/likes
-            posts.sort(key=lambda p: p.like_count, reverse=True)
+            # Preserve relevance order as returned by Discourse API (no manual sorting)
             
         except Exception as e:
             logger.error(f"Error parsing Discourse search results: {e}", exc_info=True)

@@ -1,0 +1,76 @@
+# GitHub Copilot Instructions for Askaosus Matrix Bot
+
+This guide helps AI coding agents quickly navigate, understand, and extend the Askaosus Matrix Bot project.
+
+## 1. Big-Picture Architecture
+
+- **Entry Point**: `src/main.py`
+  - Loads environment via `load_dotenv(override=False)`
+  - Configures logging and signal handlers
+  - Calls `AskaosusBot.start()`
+- **Configuration**: `src/config.py`
+  - Reads required and optional env vars for Matrix, Discourse, LLM
+  - Validates URLs, sets default base URLs
+- **Bot Core**: `src/bot.py`
+  - Wraps `nio.AsyncClient` for Matrix interactions
+  - Manages session restore/login with `session.json` in `MATRIX_STORE_PATH`
+  - Registers event callbacks: `message_callback` and `sync_callback`
+  - Orchestrates searches (Discourse) and LLM calls
+- **Discourse Search**: `src/discourse.py`
+  - `DiscourseSearcher.search(query)`: builds variants (original, keywords, English, terms)
+  - Applies `in:first` filter across variants before full-text fallback
+  - Parses JSON into `DiscoursePost` dataclass
+- **LLM Integration**: `src/llm.py`
+  - `LLMClient` wraps `AsyncOpenAI`
+  - Loads `system_prompt.md`
+  - Logs full prompt messages and raw responses
+  - Appends forum link to final answer
+
+## 2. Developer Workflows
+
+- **Production**:
+  ```bash
+  docker compose up -d
+  ```
+- **Development** (no Docker):
+  ```bash
+  pip install -r requirements.txt    # includes dev deps (watchgod)
+  python dev.py                     # auto-reload on src/ changes
+  ```
+- **Debug Search**:
+  Set `BOT_DEBUG=true` to run `test_discourse_search()` on startup (in `main.py`).
+- **Logs**:
+  - Stdout and `/app/logs/bot.log`
+  - Use `LOG_LEVEL=DEBUG` for detailed logs
+
+## 3. Project-Specific Patterns
+
+- **Async-first**: All I/O uses `asyncio`, `aiohttp`, and `nio.AsyncClient`.
+- **Session Persistence**: Stored to `session.json` in `MATRIX_STORE_PATH` to skip repeated login.
+- **Search Strategy**: Always try `in:first <variant>`, collect results, then full-text variants.
+- **Logging Conventions**: INFO for flow milestones, DEBUG for deep data (LLM prompt lengths, excerpts).
+- **Dataclasses**: `DiscoursePost` used to encapsulate search results.
+- **Docker first**: project will be run in a docker container environment in production
+- **documentation**: new features or big changes should be documented under the docs/ directory, with a short overview of that part and how it works.
+
+## 4. Key Integration Points
+
+- **Matrix (nio)**:
+  - `login()`, `sync()`, `sync_forever()`, `room_send()`, `add_event_callback()`
+  - Session file: `session.json` under `MATRIX_STORE_PATH`
+- **Discourse (REST)**:
+  - Endpoint: `GET {DISCOURSE_BASE_URL}/search.json?q=<query>`
+  - Params: `order=relevance`, `limit` based on `BOT_MAX_SEARCH_RESULTS`
+- **OpenAI (async)**:
+  - Method: `client.chat.completions.create(model, messages, max_tokens, temperature)`
+
+## 5. Quick References
+
+- **Env Vars**: Defined in `.env` (loaded in `main.py`)
+- **Source Files**:
+  - Config: `src/config.py`
+  - Bot logic: `src/bot.py`
+  - Search: `src/discourse.py`
+  - LLM: `src/llm.py`
+
+*End of instructions. Ask for feedback to refine or expand sections.*

@@ -146,12 +146,12 @@ class DiscourseSearcher:
             List of DiscoursePost objects (deduplicated)
         """
         all_results = []
-        seen_ids = set()
+        seen_topic_ids = set()
         
         # Strategy 1: Original query
         logger.info(f"Search strategy 1: Original query - '{query}'")
         results = await self._perform_search(query)
-        all_results.extend(self._deduplicate_results(results, seen_ids))
+        all_results.extend(self._deduplicate_results(results, seen_topic_ids))
         
         # Strategy 2: Extract keywords and search with them
         keywords = self._extract_keywords(query)
@@ -159,7 +159,7 @@ class DiscourseSearcher:
             keyword_query = " ".join(keywords)
             logger.info(f"Search strategy 2: Keywords - '{keyword_query}'")
             results = await self._perform_search(keyword_query)
-            all_results.extend(self._deduplicate_results(results, seen_ids))
+            all_results.extend(self._deduplicate_results(results, seen_topic_ids))
         
         # Strategy 3: Search with English equivalents of Arabic terms
         english_terms = self._get_english_equivalents(query)
@@ -167,21 +167,28 @@ class DiscourseSearcher:
             english_query = " ".join(english_terms)
             logger.info(f"Search strategy 3: English equivalents - '{english_query}'")
             results = await self._perform_search(english_query)
-            all_results.extend(self._deduplicate_results(results, seen_ids))
+            all_results.extend(self._deduplicate_results(results, seen_topic_ids))
         
         # Strategy 4: Search with individual important terms
         important_terms = self._extract_important_terms(query)
         for term in important_terms[:2]:  # Limit to top 2 terms to avoid too many requests
             logger.info(f"Search strategy 4: Individual term - '{term}'")
             results = await self._perform_search(term)
-            all_results.extend(self._deduplicate_results(results, seen_ids))
+            all_results.extend(self._deduplicate_results(results, seen_topic_ids))
         
         # Preserve relevance order as returned by Discourse API (no manual sorting)
         
         # Return top results
         final_results = all_results[:self.config.bot_max_search_results]
+        # Fetch full text content for each result (up to 4000 chars)
+        for post in final_results:
+            try:
+                full_text = await self._fetch_full_topic_content(post.topic_id)
+                post.excerpt = full_text
+            except Exception:
+                # Fallback to existing excerpt if fetch fails
+                pass
         logger.info(f"Total unique results found: {len(final_results)}")
-        
         return final_results
     
     def _extract_keywords(self, query: str) -> List[str]:
@@ -234,12 +241,12 @@ class DiscourseSearcher:
         
         return unique_terms[:3]  # Return top 3 most important terms
     
-    def _deduplicate_results(self, results: List[DiscoursePost], seen_ids: Set[int]) -> List[DiscoursePost]:
-        """Remove duplicates based on post ID."""
+    def _deduplicate_results(self, results: List[DiscoursePost], seen_topic_ids: Set[int]) -> List[DiscoursePost]:
+        """Remove duplicates based on topic ID to ensure each topic appears only once."""
         unique_results = []
         for result in results:
-            if result.id not in seen_ids:
-                seen_ids.add(result.id)
+            if result.topic_id not in seen_topic_ids:
+                seen_topic_ids.add(result.topic_id)
                 unique_results.append(result)
         return unique_results
     
@@ -293,19 +300,12 @@ class DiscourseSearcher:
             return []
     
     def _parse_search_results(self, data: dict) -> List[DiscoursePost]:
-        """Parse Discourse search results into DiscoursePost objects."""
+        """Parse Discourse search results into DiscoursePost objects, only including topics."""
         posts = []
         
         try:
-            # Discourse search API returns different structures
-            # Check for posts in the response
-            if "posts" in data:
-                for post_data in data["posts"]:
-                    post = self._parse_post(post_data)
-                    if post:
-                        posts.append(post)
-            
-            # Also check for topics
+            # Only process topics - ignore individual posts/replies
+            # This ensures the LLM only receives topic-level results, not individual replies
             if "topics" in data:
                 for topic_data in data["topics"]:
                     post = self._parse_topic(topic_data)
@@ -336,8 +336,8 @@ class DiscourseSearcher:
                 # Fallback to content if available
                 excerpt = post_data.get("cooked", "")[:300] + "..."
             
-            # Construct URL
-            url = f"{self.base_url}/t/{topic_id}/{post_id}"
+            # Construct URL - always point to topic, not specific post
+            url = f"{self.base_url}/t/{topic_id}"
             
             return DiscoursePost(
                 id=post_id,
@@ -371,9 +371,15 @@ class DiscourseSearcher:
             # Construct URL
             url = f"{self.base_url}/t/{topic_id}"
             
+            # Get title and ensure it's not empty
+            title = topic_data.get("title") or ""
+            title = title.strip()
+            if not title:
+                title = "موضوع بدون عنوان"
+            
             return DiscoursePost(
                 id=topic_id,
-                title=topic_data.get("title", "موضوع بدون عنوان"),
+                title=title,
                 excerpt=excerpt,
                 url=url,
                 topic_id=topic_id,
@@ -387,6 +393,28 @@ class DiscourseSearcher:
         except Exception as e:
             logger.error(f"Error parsing topic: {e}", exc_info=True)
             return None
+    
+    async def _fetch_full_topic_content(self, topic_id: int) -> str:
+        """Fetch full text content of a topic, strip HTML, return up to 4000 chars."""
+        # Retrieve topic JSON including all posts
+        session = await self._get_session()
+        topic_url = urljoin(self.base_url, f"/t/{topic_id}.json")
+        async with session.get(topic_url) as resp:
+            if resp.status != 200:
+                raise RuntimeError(f"Failed to fetch topic {topic_id}: {resp.status}")
+            data = await resp.json()
+
+        # Extract and clean post contents
+        content_parts = []
+        for post in data.get("post_stream", {}).get("posts", []):
+            cooked = post.get("cooked", "") or ""
+            # Strip HTML tags
+            text = re.sub(r'<[^>]+>', '', cooked)
+            content_parts.append(text)
+
+        full_text = "\n\n".join(content_parts)
+        # Limit to first 4000 characters
+        return full_text[:4000]
     
     async def close(self):
         """Close the aiohttp session."""

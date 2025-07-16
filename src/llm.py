@@ -135,8 +135,6 @@ class LLMClient:
 العنوان: {post.title}
 المحتوى: {post.excerpt}
 الرابط: {post.url}
-عدد الإعجابات: {post.like_count}
-عدد الردود: {post.reply_count}
 ---""")
         
         return "\n".join(context_parts)

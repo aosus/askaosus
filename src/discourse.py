@@ -364,9 +364,15 @@ class DiscourseSearcher:
             # Construct URL
             url = f"{self.base_url}/t/{topic_id}"
             
+            # Get title and ensure it's not empty
+            title = topic_data.get("title") or ""
+            title = title.strip()
+            if not title:
+                title = "موضوع بدون عنوان"
+            
             return DiscoursePost(
                 id=topic_id,
-                title=topic_data.get("title", "موضوع بدون عنوان"),
+                title=title,
                 excerpt=excerpt,
                 url=url,
                 topic_id=topic_id,

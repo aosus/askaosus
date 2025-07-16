@@ -180,8 +180,15 @@ class DiscourseSearcher:
         
         # Return top results
         final_results = all_results[:self.config.bot_max_search_results]
+        # Fetch full text content for each result (up to 4000 chars)
+        for post in final_results:
+            try:
+                full_text = await self._fetch_full_topic_content(post.topic_id)
+                post.excerpt = full_text
+            except Exception:
+                # Fallback to existing excerpt if fetch fails
+                pass
         logger.info(f"Total unique results found: {len(final_results)}")
-        
         return final_results
     
     def _extract_keywords(self, query: str) -> List[str]:
@@ -386,6 +393,28 @@ class DiscourseSearcher:
         except Exception as e:
             logger.error(f"Error parsing topic: {e}", exc_info=True)
             return None
+    
+    async def _fetch_full_topic_content(self, topic_id: int) -> str:
+        """Fetch full text content of a topic, strip HTML, return up to 4000 chars."""
+        # Retrieve topic JSON including all posts
+        session = await self._get_session()
+        topic_url = urljoin(self.base_url, f"/t/{topic_id}.json")
+        async with session.get(topic_url) as resp:
+            if resp.status != 200:
+                raise RuntimeError(f"Failed to fetch topic {topic_id}: {resp.status}")
+            data = await resp.json()
+
+        # Extract and clean post contents
+        content_parts = []
+        for post in data.get("post_stream", {}).get("posts", []):
+            cooked = post.get("cooked", "") or ""
+            # Strip HTML tags
+            text = re.sub(r'<[^>]+>', '', cooked)
+            content_parts.append(text)
+
+        full_text = "\n\n".join(content_parts)
+        # Limit to first 4000 characters
+        return full_text[:4000]
     
     async def close(self):
         """Close the aiohttp session."""

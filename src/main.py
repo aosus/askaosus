@@ -53,7 +53,7 @@ async def test_discourse_search(config: Config):
         logger.info(f"Found {len(results)} total results for '{query}'")
         
         for i, result in enumerate(results):
-            logger.info(f"  {i+1}. {result.title} (likes: {result.like_count})")
+            logger.info(f"  {i+1}. {result.title}")
         
         logger.info("-" * 50)
     

@@ -293,19 +293,12 @@ class DiscourseSearcher:
             return []
     
     def _parse_search_results(self, data: dict) -> List[DiscoursePost]:
-        """Parse Discourse search results into DiscoursePost objects."""
+        """Parse Discourse search results into DiscoursePost objects, only including topics."""
         posts = []
         
         try:
-            # Discourse search API returns different structures
-            # Check for posts in the response
-            if "posts" in data:
-                for post_data in data["posts"]:
-                    post = self._parse_post(post_data)
-                    if post:
-                        posts.append(post)
-            
-            # Also check for topics
+            # Only process topics - ignore individual posts/replies
+            # This ensures the LLM only receives topic-level results, not individual replies
             if "topics" in data:
                 for topic_data in data["topics"]:
                     post = self._parse_topic(topic_data)

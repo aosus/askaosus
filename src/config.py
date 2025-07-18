@@ -33,6 +33,7 @@ class Config:
         # Bot behavior configuration
         self.bot_rate_limit_seconds = float(os.getenv("BOT_RATE_LIMIT_SECONDS", "1.0"))
         self.bot_max_search_results = int(os.getenv("BOT_MAX_SEARCH_RESULTS", "5"))
+        self.bot_max_search_iterations = int(os.getenv("BOT_MAX_SEARCH_ITERATIONS", "3"))
         self.bot_debug = os.getenv("BOT_DEBUG", "false").lower() == "true"
         
         # Logging configuration

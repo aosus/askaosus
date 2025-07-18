@@ -135,61 +135,32 @@ class DiscourseSearcher:
         
         return self.session
     
-    async def search(self, query: str) -> List[DiscoursePost]:
+    async def search(self, query: str, limit: int = 6) -> List[DiscoursePost]:
         """
-        Search Discourse for posts related to the query using multiple strategies.
+        Search Discourse for posts related to the query.
         
         Args:
             query: The search query
+            limit: Maximum number of results to return
             
         Returns:
-            List of DiscoursePost objects (deduplicated)
+            List of DiscoursePost objects
         """
-        all_results = []
-        seen_topic_ids = set()
+        logger.info(f"Searching Discourse for: '{query}' (limit: {limit})")
+        results = await self._perform_search(query, limit)
         
-        # Strategy 1: Original query
-        logger.info(f"Search strategy 1: Original query - '{query}'")
-        results = await self._perform_search(query)
-        all_results.extend(self._deduplicate_results(results, seen_topic_ids))
-        
-        # Strategy 2: Extract keywords and search with them
-        keywords = self._extract_keywords(query)
-        if keywords:
-            keyword_query = " ".join(keywords)
-            logger.info(f"Search strategy 2: Keywords - '{keyword_query}'")
-            results = await self._perform_search(keyword_query)
-            all_results.extend(self._deduplicate_results(results, seen_topic_ids))
-        
-        # Strategy 3: Search with English equivalents of Arabic terms
-        english_terms = self._get_english_equivalents(query)
-        if english_terms:
-            english_query = " ".join(english_terms)
-            logger.info(f"Search strategy 3: English equivalents - '{english_query}'")
-            results = await self._perform_search(english_query)
-            all_results.extend(self._deduplicate_results(results, seen_topic_ids))
-        
-        # Strategy 4: Search with individual important terms
-        important_terms = self._extract_important_terms(query)
-        for term in important_terms[:2]:  # Limit to top 2 terms to avoid too many requests
-            logger.info(f"Search strategy 4: Individual term - '{term}'")
-            results = await self._perform_search(term)
-            all_results.extend(self._deduplicate_results(results, seen_topic_ids))
-        
-        # Preserve relevance order as returned by Discourse API (no manual sorting)
-        
-        # Return top results
-        final_results = all_results[:self.config.bot_max_search_results]
-        # Fetch full text content for each result (up to 4000 chars)
-        for post in final_results:
+        # Fetch limited content for each result (first 1000 chars)
+        for post in results:
             try:
-                full_text = await self._fetch_full_topic_content(post.topic_id)
-                post.excerpt = full_text
-            except Exception:
-                # Fallback to existing excerpt if fetch fails
+                limited_content = await self._fetch_limited_topic_content(post.topic_id, 1000)
+                post.excerpt = limited_content
+            except Exception as e:
+                logger.warning(f"Failed to fetch content for topic {post.topic_id}: {e}")
+                # Fallback to existing excerpt
                 pass
-        logger.info(f"Total unique results found: {len(final_results)}")
-        return final_results
+                
+        logger.info(f"Found {len(results)} results")
+        return results
     
     def _extract_keywords(self, query: str) -> List[str]:
         """Extract important keywords from the query."""
@@ -250,12 +221,13 @@ class DiscourseSearcher:
                 unique_results.append(result)
         return unique_results
     
-    async def _perform_search(self, query: str) -> List[DiscoursePost]:
+    async def _perform_search(self, query: str, limit: int = 6) -> List[DiscoursePost]:
         """
         Perform a single search request to Discourse.
         
         Args:
             query: The search query
+            limit: Maximum number of results to return
             
         Returns:
             List of DiscoursePost objects
@@ -268,8 +240,7 @@ class DiscourseSearcher:
             params = {
                 "q": query,
                 "order": "relevance",
-                # Increase limit for individual searches since we'll deduplicate
-                "limit": min(10, self.config.bot_max_search_results * 2),
+                "limit": limit,
             }
             
             logger.debug(f"Performing search: {search_url}")
@@ -394,8 +365,8 @@ class DiscourseSearcher:
             logger.error(f"Error parsing topic: {e}", exc_info=True)
             return None
     
-    async def _fetch_full_topic_content(self, topic_id: int) -> str:
-        """Fetch full text content of a topic, strip HTML, return up to 4000 chars."""
+    async def _fetch_limited_topic_content(self, topic_id: int, limit: int = 1000) -> str:
+        """Fetch limited text content of a topic, strip HTML, return up to specified chars."""
         # Retrieve topic JSON including all posts
         session = await self._get_session()
         topic_url = urljoin(self.base_url, f"/t/{topic_id}.json")
@@ -413,8 +384,12 @@ class DiscourseSearcher:
             content_parts.append(text)
 
         full_text = "\n\n".join(content_parts)
-        # Limit to first 4000 characters
-        return full_text[:4000]
+        # Limit to specified characters
+        return full_text[:limit]
+
+    async def _fetch_full_topic_content(self, topic_id: int) -> str:
+        """Fetch full text content of a topic, strip HTML, return up to 4000 chars."""
+        return await self._fetch_limited_topic_content(topic_id, 4000)
     
     async def close(self):
         """Close the aiohttp session."""

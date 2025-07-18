@@ -121,6 +121,7 @@ The bot is configured through environment variables that can be set in your shel
 | `BOT_RATE_LIMIT_SECONDS` | Minimum seconds between responses | `1.0` | ❌ |
 | `BOT_MAX_SEARCH_RESULTS` | Maximum Discourse posts to search | `5` | ❌ |
 | `BOT_DEBUG` | Enable debug mode | `false` | ❌ |
+| `BOT_MAX_SEARCH_ITERATIONS` | Maximum number of search iterations | `3` | ❌ |
 
 ### Logging Configuration
 

@@ -48,7 +48,7 @@ class AskaosusBot:
         
         # Initialize other components
         self.discourse_searcher = DiscourseSearcher(config)
-        self.llm_client = LLMClient(config)
+        self.llm_client = LLMClient(config, self.discourse_searcher)
         
         # Rate limiting
         self.last_message_time = 0.0
@@ -281,27 +281,14 @@ class AskaosusBot:
         return None, False
     
     async def _process_question(self, question: str) -> str:
-        """Process a question and return an answer."""
+        """Process a question using the new LLM tool-calling approach."""
         try:
             logger.info(f"Processing question: {question}")
             
-            # Search Discourse for relevant posts
-            logger.info("Starting Discourse search...")
-            search_results = await self.discourse_searcher.search(question)
-            # Log links to all found posts
-            for i, post in enumerate(search_results, start=1):
-                logger.info(f"Found Discourse post {i}: {post.title} - {post.url}")
+            # Use the new tool-calling approach
+            answer = await self.llm_client.process_question_with_tools(question)
             
-            if not search_results:
-                logger.warning("No search results found from Discourse")
-                return "عذراً، لم أتمكن من العثور على إجابة مناسبة في مجتمع أسس. يرجى المحاولة بصياغة مختلفة أو زيارة المجتمع مباشرة: https://discourse.aosus.org"
-            
-            logger.info(f"Found {len(search_results)} results, generating LLM response...")
-            
-            # Generate answer using LLM
-            answer = await self.llm_client.generate_answer(question, search_results)
-            
-            logger.info("Successfully generated answer")
+            logger.info("Successfully processed question with tools")
             return answer
             
         except Exception as e:

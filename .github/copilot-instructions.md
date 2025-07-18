@@ -60,6 +60,11 @@ This guide helps AI coding agents quickly navigate, understand, and extend the A
   - **Robust implementation**: Guarantees context provision even when original message is inaccessible
   - **Graceful degradation**: Handles different message types and error scenarios appropriately
   - **Universal applicability**: Works with any Matrix room and message type
+- **UTM Tracking**: Automatically adds UTM parameters to shared forum links
+  - Configured via `BOT_UTM_TAGS` environment variable
+  - Applied during `send_link` function execution (final step after LLM selection)
+  - Graceful fallback to original URL if UTM processing fails
+  - Preserves existing query parameters in URLs
 - **Tool-calling Functions**:
   - `search_discourse`: Search Discourse forum with query variants
   - `send_link`: Send relevant topic URL to user
@@ -93,4 +98,5 @@ This guide helps AI coding agents quickly navigate, understand, and extend the A
 - **Key Config**:
   - `BOT_MAX_SEARCH_ITERATIONS`: Max search attempts per question
   - `BOT_MAX_SEARCH_RESULTS`: Max results to return
+  - `BOT_UTM_TAGS`: UTM parameters for link tracking (format: `utm_source=bot&utm_medium=matrix`)
   - `LLM_MODEL`: OpenAI model to use via OpenRouter

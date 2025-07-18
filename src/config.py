@@ -1,6 +1,6 @@
 import os
 from typing import Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
 
 
 class Config:
@@ -38,6 +38,9 @@ class Config:
         self.bot_max_search_results = int(os.getenv("BOT_MAX_SEARCH_RESULTS", "5"))
         self.bot_max_search_iterations = int(os.getenv("BOT_MAX_SEARCH_ITERATIONS", "3"))
         self.bot_debug = os.getenv("BOT_DEBUG", "false").lower() == "true"
+        
+        # UTM tracking configuration
+        self.utm_tags = os.getenv("BOT_UTM_TAGS", "")
         
         # Logging configuration
         self.log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -89,6 +92,7 @@ class Config:
         logger.info(f"  LLM base URL: {self.llm_base_url}")
         logger.info(f"  LLM model: {self.llm_model}")
         logger.info(f"  Bot debug mode: {self.bot_debug}")
+        logger.info(f"  UTM tags configured: {'Yes' if self.utm_tags else 'No'}")
         logger.info(f"  Log level: {self.log_level}")
     
     def get_openai_client_kwargs(self) -> dict:
@@ -106,3 +110,36 @@ class Config:
             }
         
         return kwargs
+    
+    def add_utm_tags_to_url(self, url: str) -> str:
+        """Add UTM tags to a URL if configured."""
+        if not self.utm_tags:
+            return url
+        
+        try:
+            # Parse the URL
+            parsed_url = urlparse(url)
+            query_params = parse_qs(parsed_url.query)
+            
+            # Parse UTM tags from environment variable
+            # Expected format: "utm_source=bot&utm_medium=matrix&utm_campaign=help"
+            utm_params = {}
+            for param in self.utm_tags.split('&'):
+                if '=' in param:
+                    key, value = param.split('=', 1)
+                    utm_params[key] = [value]
+            
+            # Add UTM parameters to existing query parameters
+            query_params.update(utm_params)
+            
+            # Build the new URL with UTM tags
+            new_query = urlencode(query_params, doseq=True)
+            new_parsed_url = parsed_url._replace(query=new_query)
+            
+            return urlunparse(new_parsed_url)
+        except Exception as e:
+            # If there's any error adding UTM tags, return the original URL
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to add UTM tags to URL {url}: {e}")
+            return url

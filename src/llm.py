@@ -240,7 +240,11 @@ Inform the user when no relevant results could be found.
                         elif function_name == "send_link":
                             url = function_args.get("url", "")
                             message = function_args.get("message", "")
-                            final_response = f"{message}\n\n{url}"
+                            
+                            # Add UTM tags to the URL if configured
+                            url_with_utm = self.config.add_utm_tags_to_url(url)
+                            
+                            final_response = f"{message}\n\n{url_with_utm}"
                             break
                             
                         elif function_name == "no_result_message":

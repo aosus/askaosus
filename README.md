@@ -141,6 +141,7 @@ The bot is configured through environment variables that can be set in your shel
 | `BOT_MAX_SEARCH_RESULTS` | Maximum Discourse posts to search | `5` | ❌ |
 | `BOT_DEBUG` | Enable debug mode | `false` | ❌ |
 | `BOT_MAX_SEARCH_ITERATIONS` | Maximum number of search iterations | `3` | ❌ |
+| `BOT_UTM_TAGS` | UTM parameters to add to shared links (format: `utm_source=bot&utm_medium=matrix&utm_campaign=help`) | `""` | ❌ |
 
 ### Logging Configuration
 
@@ -176,6 +177,7 @@ export LLM_API_KEY="sk-or-v1-..."
 export LLM_MODEL="openai/gpt-4-turbo"
 export DISCOURSE_BASE_URL="https://discourse.example.org"
 export BOT_MENTIONS="@mybot,mybot"
+export BOT_UTM_TAGS="utm_source=matrixbot&utm_medium=matrix&utm_campaign=support"
 
 docker compose up -d
 ```

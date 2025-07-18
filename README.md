@@ -1,12 +1,14 @@
-# Askaosus Matrix Bot
+# Matrix Discourse Bot
 
-A Python Matrix bot that searches the Aosus Discourse forum to answer Arabic questions about free and open source software.
+A Python Matrix bot that searches Discourse forums to answer questions with intelligent context handling.
 
 ## Features
 
-- Responds to mentions (`@askaosus` or `askaosus`)
+- Responds to mentions in Matrix rooms
+- **Smart context handling**: Automatically includes replied-to messages when mentioned in replies
 - Searches Discourse forum posts to find relevant answers
 - Supports multiple LLM providers (OpenAI, OpenRouter, Gemini)
+- Robust error handling with graceful fallbacks
 - Configurable through environment variables
 - Dockerized for easy deployment
 - Stateless design with persistent Matrix session
@@ -35,28 +37,44 @@ python dev.py
 
 The bot operates as follows:
 
-1. **Listening**: Monitors Matrix rooms for messages mentioning `@askaosus` or `askaosus`
+1. **Listening**: Monitors Matrix rooms for messages mentioning the bot
 2. **Question Detection**: Extracts the question from the message or reply
-3. **Discourse Search**: Searches the Aosus Discourse forum for relevant posts
-4. **AI Processing**: Uses the configured LLM to generate a helpful answer based on forum content
-5. **Response**: Sends a concise Arabic response with links to relevant forum posts
+3. **Context Analysis**: When mentioned in a reply, automatically fetches and includes the original message as context
+4. **Discourse Search**: Searches the configured Discourse forum for relevant posts
+5. **AI Processing**: Uses the configured LLM to generate a helpful answer based on forum content
+6. **Response**: Sends a concise response with links to relevant forum posts
 
 ### Bot Triggers
 
 The bot responds to:
 
-- Direct mentions: `@askaosus كيف أثبت برنامج على أوبونتو؟`
-- Name mentions: `askaosus ما هو أفضل محرر نصوص؟`
-- Replies: Reply to any message with `@askaosus` to use the original message as context
+- Direct mentions: `@botname How do I install software?`
+- Name mentions: `botname What is the best text editor?`
+- **Replies with context**: Reply to any message with `@botname` to automatically include the original message as context for better understanding
+
+### Context Handling
+
+When you mention the bot in a reply to another message, it automatically:
+- Fetches the original message content
+- Combines both the original message and your reply as context
+- Provides more targeted and relevant search results
+- Handles errors gracefully (provides fallback context if original message can't be retrieved)
+
+Example:
+```
+User A: "I'm having trouble with my graphics driver"
+User B: "@botname can you help with this?" (as a reply)
+```
+The bot receives both messages and searches for graphics driver issues specifically.
 
 ### Response Format
 
 The bot provides:
 
-- A concise answer in Arabic
+- A concise answer in the same language as the question
 - References to relevant Discourse posts
 - Direct links for further reading
-- Encouragement to participate in the forum community
+- Context-aware responses when replying to conversations
 
 ## Configuration
 
@@ -67,16 +85,16 @@ The bot is configured through environment variables that can be set in your shel
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `MATRIX_HOMESERVER_URL` | The Matrix homeserver URL | `https://matrix.org` | ✅ |
-| `MATRIX_USER_ID` | The bot's Matrix user ID (e.g., `@askaosus:matrix.org`) | `@askaosus:matrix.org` | ✅ |
+| `MATRIX_USER_ID` | The bot's Matrix user ID (e.g., `@mybot:matrix.org`) | `@mybot:matrix.org` | ✅ |
 | `MATRIX_PASSWORD` | The bot's Matrix account password | - | ✅ |
-| `MATRIX_DEVICE_NAME` | Device name for the Matrix session | `askaosus-python` | ❌ |
+| `MATRIX_DEVICE_NAME` | Device name for the Matrix session | `discourse-bot-python` | ❌ |
 | `MATRIX_STORE_PATH` | Path to store Matrix session data | `/app/data/matrix_store` | ❌ |
 
 ### Discourse Configuration
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `DISCOURSE_BASE_URL` | The Discourse forum base URL | `https://discourse.aosus.org` | ❌ |
+| `DISCOURSE_BASE_URL` | The Discourse forum base URL | `https://discourse.example.org` | ❌ |
 | `DISCOURSE_API_KEY` | Discourse API key for authenticated requests | - | ❌ |
 | `DISCOURSE_USERNAME` | Discourse username for API authentication | - | ❌ |
 
@@ -118,6 +136,7 @@ The bot is configured through environment variables that can be set in your shel
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
+| `BOT_MENTIONS` | Comma-separated list of mentions that trigger the bot | `@askaosus,askaosus` | ❌ |
 | `BOT_RATE_LIMIT_SECONDS` | Minimum seconds between responses | `1.0` | ❌ |
 | `BOT_MAX_SEARCH_RESULTS` | Maximum Discourse posts to search | `5` | ❌ |
 | `BOT_DEBUG` | Enable debug mode | `false` | ❌ |
@@ -140,6 +159,8 @@ export MATRIX_PASSWORD="your_matrix_password"
 export LLM_PROVIDER="openai"
 export LLM_API_KEY="sk-..."
 export LLM_MODEL="gpt-4"
+export BOT_MENTIONS="@mybot,mybot"
+export DISCOURSE_BASE_URL="https://discourse.example.org"
 
 docker compose up -d
 ```
@@ -147,12 +168,14 @@ docker compose up -d
 ### OpenRouter Setup
 
 ```bash
-export MATRIX_HOMESERVER_URL="https://matrix.aosus.org"
-export MATRIX_USER_ID="@askaosus:aosus.org"
+export MATRIX_HOMESERVER_URL="https://matrix.example.org"
+export MATRIX_USER_ID="@mybot:example.org"
 export MATRIX_PASSWORD="your_password"
 export LLM_PROVIDER="openrouter"
 export LLM_API_KEY="sk-or-v1-..."
 export LLM_MODEL="openai/gpt-4-turbo"
+export DISCOURSE_BASE_URL="https://discourse.example.org"
+export BOT_MENTIONS="@mybot,mybot"
 
 docker compose up -d
 ```
@@ -205,7 +228,7 @@ docker compose logs -f
 docker compose -f docker-compose.dev.yml logs -f
 
 # Check specific container logs
-docker logs askaosus-matrix-bot
+docker logs matrix-discourse-bot
 ```
 
 ### Debug Mode

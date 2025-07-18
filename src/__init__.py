@@ -1,8 +1,8 @@
 """
-Askaosus Matrix Bot
+Matrix Discourse Bot
 
-A Matrix bot that searches the Aosus Discourse forum to answer Arabic questions
-about free and open source software.
+A Matrix bot that searches Discourse forums to answer questions with
+intelligent context handling for any community forum.
 """
 
 __version__ = "1.0.0"

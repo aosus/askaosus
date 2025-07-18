@@ -31,6 +31,9 @@ class Config:
         self.llm_temperature = float(os.getenv("LLM_TEMPERATURE", "0.7"))
         
         # Bot behavior configuration
+        # Bot mentions (comma-separated list)
+        bot_mentions_str = os.getenv("BOT_MENTIONS", "@askaosus,askaosus")
+        self.bot_mentions = [mention.strip() for mention in bot_mentions_str.split(",")]
         self.bot_rate_limit_seconds = float(os.getenv("BOT_RATE_LIMIT_SECONDS", "1.0"))
         self.bot_max_search_results = int(os.getenv("BOT_MAX_SEARCH_RESULTS", "5"))
         self.bot_max_search_iterations = int(os.getenv("BOT_MAX_SEARCH_ITERATIONS", "3"))

@@ -16,6 +16,13 @@ This guide helps AI coding agents quickly navigate, understand, and extend the A
   - Manages session restore/login with `session.json` in `MATRIX_STORE_PATH`
   - Registers event callbacks: `message_callback` and `sync_callback`
   - Orchestrates searches (Discourse) and LLM calls
+  - **Enhanced Context Handling**: Automatically fetches replied-to messages when bot is mentioned in a reply
+    - Uses `room_get_event` to fetch original message content
+    - **Guarantees context provision**: Always provides context when a reply is detected, even if original message fetch fails
+    - Handles different message types gracefully (text, images, files, etc.)
+    - Combines both original and reply messages as context for LLM
+    - Provides fallback context for error scenarios
+    - Graceful fallback if original message cannot be fetched
 - **Discourse Search**: `src/discourse.py`
   - `DiscourseSearcher.search(query)`: builds variants (original, keywords, English, terms)
   - Applies `in:first` filter across variants before full-text fallback
@@ -49,12 +56,17 @@ This guide helps AI coding agents quickly navigate, understand, and extend the A
 - **Async-first**: All I/O uses `asyncio`, `aiohttp`, and `nio.AsyncClient`.
 - **Session Persistence**: Stored to `session.json` in `MATRIX_STORE_PATH` to skip repeated login.
 - **Search Strategy**: Uses LLM tool-calling with iterative search refinement
+- **Enhanced Context Awareness**: When mentioned in replies, **always** combines original and reply messages for better context understanding
+  - **Robust implementation**: Guarantees context provision even when original message is inaccessible
+  - **Graceful degradation**: Handles different message types and error scenarios appropriately
+  - **Universal applicability**: Works with any Matrix room and message type
 - **Tool-calling Functions**:
   - `search_discourse`: Search Discourse forum with query variants
   - `send_link`: Send relevant topic URL to user
   - `no_result_message`: Handle cases when no results found
 - **Logging Conventions**: INFO for flow milestones, DEBUG for deep data (LLM prompt lengths, excerpts).
 - **Dataclasses**: `DiscoursePost` used to encapsulate search results.
+- **Context Processing**: Replies to messages include original message content for better context understanding
 - **Docker first**: project will be run in a docker container environment in production
 - **documentation**: new features or big changes should be documented under the docs/ directory, with a short overview of that part and how it works.
 

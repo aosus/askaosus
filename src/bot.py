@@ -12,6 +12,7 @@ from nio import (
     MatrixRoom,
     RoomMessageText,
     SyncResponse,
+    RoomGetEventResponse,
 )
 
 from .config import Config
@@ -232,12 +233,12 @@ class AskaosusBot:
         Determine if the bot should respond to a message and extract the question.
         
         Returns:
-            Tuple of (question, should_respond)
+            Tuple of (question_with_context, should_respond)
         """
         message_body = event.body.strip()
         
         # Check for direct mentions
-        bot_mentions = ["@askaosus", "askaosus"]
+        bot_mentions = self.config.bot_mentions
         
         # Check if the message mentions the bot
         message_lower = message_body.lower()
@@ -250,33 +251,53 @@ class AskaosusBot:
                 question = re.sub(rf"\b{re.escape(mention)}\b", "", question, flags=re.IGNORECASE)
             question = question.strip()
             
-            # If there's still content after removing mentions, use it as the question
-            if question:
+            # Check if this is a reply to another message
+            replied_to_content = None
+            is_reply = False
+            
+            if hasattr(event, 'source') and 'content' in event.source:
+                content = event.source['content']
+                if 'm.relates_to' in content and 'm.in_reply_to' in content['m.relates_to']:
+                    is_reply = True
+                    original_event_id = content['m.relates_to']['m.in_reply_to']['event_id']
+                    
+                    # Always attempt to fetch the original message for context
+                    try:
+                        logger.debug(f"Fetching replied-to message: {original_event_id}")
+                        original_response = await self.matrix_client.room_get_event(room.room_id, original_event_id)
+                        
+                        # Check if the response is successful and contains a message event
+                        if isinstance(original_response, RoomGetEventResponse):
+                            original_event = original_response.event
+                            # Handle different types of events
+                            if isinstance(original_event, RoomMessageText):
+                                replied_to_content = original_event.body
+                                logger.debug(f"Retrieved replied-to message content: {replied_to_content[:100]}...")
+                            else:
+                                # Handle non-text events (images, files, etc.)
+                                event_type = type(original_event).__name__
+                                replied_to_content = f"[{event_type} - content not accessible as text]"
+                                logger.debug(f"Original event is not a text message: {event_type}")
+                        else:
+                            logger.warning(f"Failed to fetch original message {original_event_id}: {original_response}")
+                            replied_to_content = "[Original message could not be retrieved]"
+                    except Exception as e:
+                        logger.warning(f"Error fetching replied-to message: {e}")
+                        replied_to_content = "[Original message could not be retrieved]"
+            
+            # Always provide context when this is a reply, even if fetching failed
+            if is_reply:
+                # Ensure we have some context, even if fetching failed
+                if replied_to_content is None:
+                    replied_to_content = "[Original message could not be retrieved]"
+                
+                # Create a context string with both messages
+                full_context = f"Original message: {replied_to_content}\n\nReply: {question}"
+                logger.info("Including replied-to message as context for better understanding")
+                return full_context, True
+            elif question:
+                # No replied-to message, just use the mentioning message
                 return question, True
-        
-        # Check if this is a reply to another message and the reply mentions the bot
-        if hasattr(event, 'source') and 'content' in event.source:
-            content = event.source['content']
-            if 'm.relates_to' in content:
-                relates_to = content['m.relates_to']
-                if relates_to.get('rel_type') == 'm.replace' or 'in_reply_to' in relates_to:
-                    # This is a reply, check if it mentions the bot
-                    if mentioned:
-                        # Get the original message being replied to
-                        try:
-                            original_event_id = relates_to.get('in_reply_to', {}).get('event_id')
-                            if original_event_id:
-                                # We can use the replied-to message as context
-                                # For now, just use the reply text as the question
-                                question = re.sub(r"^> .*\n", "", message_body, flags=re.MULTILINE)
-                                for mention in bot_mentions:
-                                    question = re.sub(rf"\b{re.escape(mention)}\b", "", question, flags=re.IGNORECASE)
-                                question = question.strip()
-                                
-                                if question:
-                                    return question, True
-                        except Exception as e:
-                            logger.debug(f"Error processing reply: {e}")
         
         return None, False
     
@@ -293,4 +314,4 @@ class AskaosusBot:
             
         except Exception as e:
             logger.error(f"Error processing question: {e}", exc_info=True)
-            return "عذراً، حدث خطأ أثناء البحث عن إجابة. يرجى المحاولة مرة أخرى لاحقاً أو زيارة مجتمع أسس مباشرة: https://discourse.aosus.org"
+            return "Sorry, an error occurred while searching for an answer. Please try again later or visit the forum directly."

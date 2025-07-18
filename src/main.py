@@ -39,23 +39,14 @@ async def test_discourse_search(config: Config):
     
     searcher = DiscourseSearcher(config)
     
-    # Test different types of queries
-    test_queries = [
-        "كيف أثبت أوبونتو",
-        "مشكلة في فايرفوكس", 
-        "تحديث النظام",
-        "linux problem"
-    ]
+    # Test a single query
+    query = "كيف أثبت أوبونتو"
+    logger.info(f"Testing search with query: '{query}'")
+    results = await searcher.search(query)
+    logger.info(f"Found {len(results)} total results for '{query}'")
     
-    for query in test_queries:
-        logger.info(f"Testing search with query: '{query}'")
-        results = await searcher.search(query)
-        logger.info(f"Found {len(results)} total results for '{query}'")
-        
-        for i, result in enumerate(results):
-            logger.info(f"  {i+1}. {result.title}")
-        
-        logger.info("-" * 50)
+    for i, result in enumerate(results):
+        logger.info(f"  {i+1}. {result.title}")
     
     await searcher.close()
 

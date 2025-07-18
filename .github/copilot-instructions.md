@@ -21,10 +21,11 @@ This guide helps AI coding agents quickly navigate, understand, and extend the A
   - Applies `in:first` filter across variants before full-text fallback
   - Parses JSON into `DiscoursePost` dataclass
 - **LLM Integration**: `src/llm.py`
-  - `LLMClient` wraps `AsyncOpenAI`
-  - Loads `system_prompt.md`
-  - Logs full prompt messages and raw responses
-  - Appends forum link to final answer
+  - `LLMClient` wraps `AsyncOpenAI` with tool-calling capabilities
+  - Uses OpenRouter-compatible API for LLM access
+  - Implements iterative search with `BOT_MAX_SEARCH_ITERATIONS`
+  - Loads `system_prompt.md` for system instructions
+  - Supports tool-calling functions: `search_discourse`, `send_link`, `no_result_message`
 
 ## 2. Developer Workflows
 
@@ -47,7 +48,11 @@ This guide helps AI coding agents quickly navigate, understand, and extend the A
 
 - **Async-first**: All I/O uses `asyncio`, `aiohttp`, and `nio.AsyncClient`.
 - **Session Persistence**: Stored to `session.json` in `MATRIX_STORE_PATH` to skip repeated login.
-- **Search Strategy**: Always try `in:first <variant>`, collect results, then full-text variants.
+- **Search Strategy**: Uses LLM tool-calling with iterative search refinement
+- **Tool-calling Functions**:
+  - `search_discourse`: Search Discourse forum with query variants
+  - `send_link`: Send relevant topic URL to user
+  - `no_result_message`: Handle cases when no results found
 - **Logging Conventions**: INFO for flow milestones, DEBUG for deep data (LLM prompt lengths, excerpts).
 - **Dataclasses**: `DiscoursePost` used to encapsulate search results.
 - **Docker first**: project will be run in a docker container environment in production
@@ -62,7 +67,8 @@ This guide helps AI coding agents quickly navigate, understand, and extend the A
   - Endpoint: `GET {DISCOURSE_BASE_URL}/search.json?q=<query>`
   - Params: `order=relevance`, `limit` based on `BOT_MAX_SEARCH_RESULTS`
 - **OpenAI (async)**:
-  - Method: `client.chat.completions.create(model, messages, max_tokens, temperature)`
+  - Method: `client.chat.completions.create(model, messages, tools, tool_choice="auto")`
+  - Uses OpenRouter-compatible API endpoints
 
 ## 5. Quick References
 
@@ -72,5 +78,7 @@ This guide helps AI coding agents quickly navigate, understand, and extend the A
   - Bot logic: `src/bot.py`
   - Search: `src/discourse.py`
   - LLM: `src/llm.py`
-
-*End of instructions. Ask for feedback to refine or expand sections.*
+- **Key Config**:
+  - `BOT_MAX_SEARCH_ITERATIONS`: Max search attempts per question
+  - `BOT_MAX_SEARCH_RESULTS`: Max results to return
+  - `LLM_MODEL`: OpenAI model to use via OpenRouter

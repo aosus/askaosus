@@ -7,6 +7,7 @@ from urllib.parse import urljoin
 import aiohttp
 
 from .config import Config
+from .responses import ResponseConfig
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,9 @@ class DiscourseSearcher:
         self.config = config
         self.base_url = config.discourse_base_url.rstrip('/')
         self.session: Optional[aiohttp.ClientSession] = None
+        
+        # Initialize response configuration
+        self.response_config = ResponseConfig()
         
         # Common Arabic to English software name mappings
         self.name_mappings = {
@@ -312,7 +316,7 @@ class DiscourseSearcher:
             
             return DiscoursePost(
                 id=post_id,
-                title=post_data.get("topic_title", "منشور بدون عنوان"),
+                title=post_data.get("topic_title", self.response_config.get_discourse_message("untitled_post", "ar")),
                 excerpt=excerpt,
                 url=url,
                 topic_id=topic_id,
@@ -337,7 +341,7 @@ class DiscourseSearcher:
             # Get excerpt
             excerpt = topic_data.get("excerpt", "")
             if not excerpt:
-                excerpt = "موضوع في مجتمع أسس"
+                excerpt = self.response_config.get_discourse_message("default_excerpt", "ar")
             
             # Construct URL
             url = f"{self.base_url}/t/{topic_id}"
@@ -346,7 +350,7 @@ class DiscourseSearcher:
             title = topic_data.get("title") or ""
             title = title.strip()
             if not title:
-                title = "موضوع بدون عنوان"
+                title = self.response_config.get_discourse_message("untitled_topic", "ar")
             
             return DiscoursePost(
                 id=topic_id,

@@ -18,6 +18,7 @@ from nio import (
 from .config import Config
 from .discourse import DiscourseSearcher
 from .llm import LLMClient
+from .responses import ResponseConfig
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,9 @@ class AskaosusBot:
         """Initialize the bot with configuration."""
         self.config = config
         self.is_running = False
+        
+        # Initialize response configuration
+        self.response_config = ResponseConfig()
         
         # Initialize Matrix client
         client_config = ClientConfig(
@@ -314,4 +318,4 @@ class AskaosusBot:
             
         except Exception as e:
             logger.error(f"Error processing question: {e}", exc_info=True)
-            return "Sorry, an error occurred while searching for an answer. Please try again later or visit the forum directly."
+            return self.response_config.get_error_message("search_error", "en")

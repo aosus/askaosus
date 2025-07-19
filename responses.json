@@ -1,0 +1,48 @@
+{
+  "error_messages": {
+    "no_results_found": {
+      "ar": "عذراً، لم أتمكن من العثور على موضوعات ذات صلة بسؤالك. يرجى المحاولة بصيغة مختلفة أو زيارة المنتدى مباشرة: https://discourse.aosus.org",
+      "en": "Sorry, I couldn't find any relevant topics for your question. Please try rephrasing your query or visit the forum directly: https://discourse.aosus.org"
+    },
+    "processing_error": {
+      "ar": "عذراً، حدث خطأ أثناء معالجة سؤالك. يرجى المحاولة مرة أخرى أو زيارة المنتدى مباشرة: https://discourse.aosus.org",
+      "en": "Sorry, an error occurred while processing your question. Please try again later or visit the forum directly: https://discourse.aosus.org"
+    },
+    "search_error": {
+      "ar": "عذراً، حدث خطأ أثناء البحث. يرجى المحاولة مرة أخرى أو زيارة المنتدى مباشرة: https://discourse.aosus.org",
+      "en": "Sorry, an error occurred while searching for an answer. Please try again later or visit the forum directly: https://discourse.aosus.org"
+    },
+    "fallback_error": {
+      "ar": "عذراً، لم أتمكن من معالجة سؤالك. يرجى المحاولة مرة أخرى أو زيارة المنتدى مباشرة: https://discourse.aosus.org",
+      "en": "Sorry, I couldn't process your question. Please try again or visit the forum directly: https://discourse.aosus.org"
+    }
+  },
+  "discourse_messages": {
+    "no_results": {
+      "ar": "لم يتم العثور على موضوعات ذات صلة.",
+      "en": "No relevant topics found."
+    },
+    "untitled_post": {
+      "ar": "منشور بدون عنوان",
+      "en": "Untitled post"
+    },
+    "untitled_topic": {
+      "ar": "موضوع بدون عنوان", 
+      "en": "Untitled topic"
+    },
+    "default_excerpt": {
+      "ar": "موضوع في مجتمع أسس",
+      "en": "Topic in Aosus community"
+    }
+  },
+  "system_messages": {
+    "perfect_match": {
+      "ar": "وجدت تطابقاً مثالياً لسؤالك:",
+      "en": "I found a perfect match for your question:"
+    },
+    "closest_match": {
+      "ar": "إليك أقرب موضوع ذي صلة وجدته:",
+      "en": "Here's the closest relevant topic I found:"
+    }
+  }
+}

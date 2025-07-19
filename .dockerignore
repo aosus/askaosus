@@ -57,3 +57,8 @@ docker-compose*.yml
 # Documentation
 *.md
 !system_prompt.md
+
+# Test files
+test_*.py
+*_test.py
+tests/

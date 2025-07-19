@@ -15,6 +15,76 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  test-env-config:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install python-dotenv
+
+      - name: Test environment variable configuration
+        run: |
+          python test_env_config.py
+
+      - name: Test Docker container with environment variables
+        run: |
+          # Build the Docker image
+          docker build -t test-askaosus .
+          
+          # Test that the container can start with environment variables
+          # Use a short timeout since we just want to test config loading
+          timeout 30s docker run --rm \
+            -e MATRIX_HOMESERVER_URL=https://matrix.test.org \
+            -e MATRIX_USER_ID=@testbot:matrix.test.org \
+            -e MATRIX_PASSWORD=test_password_123 \
+            -e DISCOURSE_API_KEY=test_key \
+            -e DISCOURSE_USERNAME=testuser \
+            -e LLM_API_KEY=test_llm_key \
+            -e BOT_DEBUG=true \
+            test-askaosus || true
+          
+          echo "Docker container test completed"
+
+      - name: Test Docker Compose without .env file
+        run: |
+          # Remove any .env file to ensure we're testing without it
+          rm -f .env
+          
+          # Test that docker-compose works with environment variables only
+          docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit
+          
+          # Check if the container started successfully
+          if [ $? -eq 0 ]; then
+            echo "✓ Docker Compose test passed - environment variables loaded correctly"
+          else
+            echo "✗ Docker Compose test failed"
+            exit 1
+          fi
+
+      - name: Verify no .env file dependency
+        run: |
+          # Verify that the Dockerfile doesn't copy .env files
+          if grep -q "COPY.*\.env" Dockerfile; then
+            echo "✗ Dockerfile should not copy .env files"
+            exit 1
+          fi
+          
+          # Verify that docker-compose.yml uses variable substitution
+          if ! grep -q "\${.*}" docker-compose.yml; then
+            echo "✗ docker-compose.yml should use environment variable substitution"
+            exit 1
+          fi
+          
+          echo "✓ Configuration verified - no .env file dependency"
+
   build-amd64:
     runs-on: ubuntu-latest
     permissions:

@@ -35,7 +35,9 @@ The workflow uses different tagging strategies based on the trigger:
 The workflow behavior depends on the trigger:
 
 ### For Pull Requests (Testing Mode)
-- Builds both AMD64 and ARM64 images for validation
+- **Environment Variable Testing**: Validates configuration loading without .env files
+- **Docker Build Testing**: Builds both AMD64 and ARM64 images for validation
+- **Configuration Validation**: Tests environment variable handling in containers
 - No authentication or image pushing occurs
 - Manifest creation is skipped
 - Build caching is still utilized
@@ -93,7 +95,31 @@ The multi-platform image works seamlessly with the existing `docker-compose.yml`
 services:
   askaosus-bot:
     image: ghcr.io/aosus/askaosus:latest
-    # ... rest of configuration
+    environment:
+      # Environment variables are passed directly - no .env file mounting needed
+      - MATRIX_HOMESERVER_URL=${MATRIX_HOMESERVER_URL}
+      - MATRIX_USER_ID=${MATRIX_USER_ID}
+      - MATRIX_PASSWORD=${MATRIX_PASSWORD}
+      # ... other variables
+```
+
+**Important**: The bot works entirely through environment variables. No `.env` file mounting is required or recommended for production deployments.
+
+### Running with Environment Variables Only
+
+```bash
+# Run directly with Docker
+docker run -d \
+  --name askaosus-bot \
+  -e MATRIX_HOMESERVER_URL=https://matrix.org \
+  -e MATRIX_USER_ID=@askaosus:matrix.org \
+  -e MATRIX_PASSWORD=your_password \
+  -e DISCOURSE_API_KEY=your_api_key \
+  -e DISCOURSE_USERNAME=your_username \
+  -e LLM_API_KEY=your_llm_key \
+  -v askaosus-data:/app/data \
+  -v askaosus-logs:/app/logs \
+  ghcr.io/aosus/askaosus:latest
 ```
 
 ## Triggers

@@ -15,6 +15,12 @@ The project uses a GitHub Actions workflow (`.github/workflows/docker-publish.ym
 
 The workflow uses different tagging strategies based on the trigger:
 
+### Pull Request Builds (PR testing)
+- Tests Docker builds on both architectures
+- No images are published or pushed to the registry
+- Validates that changes don't break the Docker build process
+- Uses caching for faster builds
+
 ### Main Branch Builds (Push to `main`)
 - `latest`: Latest stable build from the main branch
 - `main`: Branch-specific tag
@@ -25,6 +31,16 @@ The workflow uses different tagging strategies based on the trigger:
 - `1.0`: Version without 'v' prefix (e.g., 1.2)
 
 ## Workflow Stages
+
+The workflow behavior depends on the trigger:
+
+### For Pull Requests (Testing Mode)
+- Builds both AMD64 and ARM64 images for validation
+- No authentication or image pushing occurs
+- Manifest creation is skipped
+- Build caching is still utilized
+
+### For Main Branch and Releases (Publishing Mode)
 
 ### 1. Build AMD64 (`build-amd64`)
 - Runs on: `ubuntu-latest` 
@@ -83,8 +99,9 @@ services:
 ## Triggers
 
 The workflow triggers on:
-- **Push to main branch**: Builds and tags as `latest`
-- **Published releases**: Builds and tags with version numbers
+- **Push to main branch**: Builds and publishes images, tags as `latest`
+- **Pull requests**: Builds images for testing without publishing (validation only)
+- **Published releases**: Builds and publishes images with version tags
 
 ## Requirements
 

@@ -58,8 +58,8 @@ jobs:
           # Remove any .env file to ensure we're testing without it
           rm -f .env
           
-          # Test that docker-compose works with environment variables only
-          docker-compose -f docker-compose.test.yml up --build --abort-on-container-exit
+          # Test that docker compose works with environment variables only
+          docker compose -f docker-compose.test.yml up --build --abort-on-container-exit
           
           # Check if the container started successfully
           if [ $? -eq 0 ]; then

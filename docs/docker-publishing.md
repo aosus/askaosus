@@ -9,7 +9,7 @@ The project uses a GitHub Actions workflow (`.github/workflows/docker-publish.ym
 ## Architecture Support
 
 - **AMD64 (x86_64)**: Built using standard GitHub-hosted runners (`ubuntu-latest`)
-- **ARM64 (aarch64)**: Built using GitHub's native ARM64 runners (`ubuntu-24.04-arm64`)
+- **ARM64 (aarch64)**: Built using QEMU emulation on standard runners
 
 ## Tagging Strategy
 
@@ -36,28 +36,18 @@ The workflow behavior depends on the trigger:
 
 ### For Pull Requests (Testing Mode)
 - **Environment Variable Testing**: Validates configuration loading without .env files
-- **Docker Build Testing**: Builds both AMD64 and ARM64 images for validation
+- **Docker Build Testing**: Builds both AMD64 and ARM64 images for validation using QEMU
 - **Configuration Validation**: Tests environment variable handling in containers
 - No authentication or image pushing occurs
-- Manifest creation is skipped
 - Build caching is still utilized
 
 ### For Main Branch and Releases (Publishing Mode)
 
-### 1. Build AMD64 (`build-amd64`)
+### 1. Build and Push Multi-Platform (`build-and-push`)
 - Runs on: `ubuntu-latest` 
-- Platform: `linux/amd64`
-- Pushes image with `-amd64` suffix
-
-### 2. Build ARM64 (`build-arm64`)
-- Runs on: `ubuntu-24.04-arm64` (native ARM runners)
-- Platform: `linux/arm64` 
-- Pushes image with `-arm64` suffix
-
-### 3. Create Multi-Platform Manifest (`create-manifest`)
-- Runs after both builds complete
-- Creates unified manifest pointing to both architecture-specific images
-- Publishes final multi-platform image tags
+- Platforms: `linux/amd64,linux/arm64`
+- Uses QEMU emulation for cross-platform builds
+- Directly creates and pushes multi-platform manifest
 
 ## Registry Details
 
@@ -68,7 +58,7 @@ The workflow behavior depends on the trigger:
 ## Performance Features
 
 - **Build Caching**: Uses GitHub Actions cache for faster builds
-- **Parallel Builds**: AMD64 and ARM64 builds run in parallel
+- **Cross-Platform Builds**: Single job builds both AMD64 and ARM64 using QEMU emulation
 - **Layer Caching**: Docker layer caching enabled for both architectures
 
 ## Usage
@@ -82,9 +72,9 @@ docker pull ghcr.io/aosus/askaosus:latest
 # Pull specific version
 docker pull ghcr.io/aosus/askaosus:v1.0
 
-# Pull architecture-specific image (advanced usage)
-docker pull ghcr.io/aosus/askaosus:latest-amd64
-docker pull ghcr.io/aosus/askaosus:latest-arm64
+# Pull architecture-specific image (not available with unified build)
+# docker pull ghcr.io/aosus/askaosus:latest-amd64
+# docker pull ghcr.io/aosus/askaosus:latest-arm64
 ```
 
 ### Docker Compose
@@ -134,16 +124,16 @@ The workflow triggers on:
 For the workflow to function properly:
 
 1. **Repository permissions**: The `GITHUB_TOKEN` needs `packages: write` permission
-2. **ARM runner access**: Repository must have access to GitHub's ARM64 runners
+2. **QEMU emulation**: Uses Docker Buildx with QEMU for cross-platform builds
 3. **Container Registry**: GitHub Container Registry must be enabled for the repository
 
 ## Troubleshooting
 
-### ARM64 Runner Unavailable
-If ARM64 runners are not available, the workflow will fail at the `build-arm64` job. In such cases, consider:
-1. Using QEMU emulation on standard runners
-2. Building only AMD64 images temporarily
-3. Contacting GitHub support for ARM runner access
+### QEMU Emulation Issues
+If cross-platform builds fail, verify that:
+1. QEMU setup action completed successfully
+2. Docker Buildx supports the required platforms
+3. Build logs show both `linux/amd64` and `linux/arm64` platforms
 
 ### Registry Authentication
 If image pushes fail, verify that:

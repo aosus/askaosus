@@ -49,3 +49,6 @@ logs/
 # Matrix store files
 *.db
 *.db-*
+
+# Test files (keep only in development)
+test_imports.py

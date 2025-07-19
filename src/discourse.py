@@ -316,7 +316,7 @@ class DiscourseSearcher:
             
             return DiscoursePost(
                 id=post_id,
-                title=post_data.get("topic_title", self.response_config.get_discourse_message("untitled_post", "ar")),
+                title=post_data.get("topic_title", self.response_config.get_discourse_message("untitled_post")),
                 excerpt=excerpt,
                 url=url,
                 topic_id=topic_id,
@@ -341,7 +341,7 @@ class DiscourseSearcher:
             # Get excerpt
             excerpt = topic_data.get("excerpt", "")
             if not excerpt:
-                excerpt = self.response_config.get_discourse_message("default_excerpt", "ar")
+                excerpt = self.response_config.get_discourse_message("default_excerpt")
             
             # Construct URL
             url = f"{self.base_url}/t/{topic_id}"
@@ -350,7 +350,7 @@ class DiscourseSearcher:
             title = topic_data.get("title") or ""
             title = title.strip()
             if not title:
-                title = self.response_config.get_discourse_message("untitled_topic", "ar")
+                title = self.response_config.get_discourse_message("untitled_topic")
             
             return DiscoursePost(
                 id=topic_id,

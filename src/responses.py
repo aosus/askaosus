@@ -51,92 +51,56 @@ class ResponseConfig:
         """Get default hardcoded responses as fallback."""
         return {
             "error_messages": {
-                "no_results_found": {
-                    "ar": "عذراً، لم أتمكن من العثور على موضوعات ذات صلة بسؤالك. يرجى المحاولة بصيغة مختلفة أو زيارة المنتدى مباشرة: https://discourse.aosus.org",
-                    "en": "Sorry, I couldn't find any relevant topics for your question. Please try rephrasing your query or visit the forum directly: https://discourse.aosus.org"
-                },
-                "processing_error": {
-                    "ar": "عذراً، حدث خطأ أثناء معالجة سؤالك. يرجى المحاولة مرة أخرى أو زيارة المنتدى مباشرة: https://discourse.aosus.org",
-                    "en": "Sorry, an error occurred while processing your question. Please try again later or visit the forum directly: https://discourse.aosus.org"
-                },
-                "search_error": {
-                    "ar": "عذراً، حدث خطأ أثناء البحث. يرجى المحاولة مرة أخرى أو زيارة المنتدى مباشرة: https://discourse.aosus.org",
-                    "en": "Sorry, an error occurred while searching for an answer. Please try again later or visit the forum directly: https://discourse.aosus.org"
-                },
-                "fallback_error": {
-                    "ar": "عذراً، لم أتمكن من معالجة سؤالك. يرجى المحاولة مرة أخرى أو زيارة المنتدى مباشرة: https://discourse.aosus.org",
-                    "en": "Sorry, I couldn't process your question. Please try again or visit the forum directly: https://discourse.aosus.org"
-                }
+                "no_results_found": "Sorry, I couldn't find any relevant topics for your question. Please try rephrasing your query or visit the forum directly: https://discourse.aosus.org",
+                "processing_error": "Sorry, an error occurred while processing your question. Please try again later or visit the forum directly: https://discourse.aosus.org",
+                "search_error": "Sorry, an error occurred while searching for an answer. Please try again later or visit the forum directly: https://discourse.aosus.org",
+                "fallback_error": "Sorry, I couldn't process your question. Please try again or visit the forum directly: https://discourse.aosus.org"
             },
             "discourse_messages": {
-                "no_results": {
-                    "ar": "لم يتم العثور على موضوعات ذات صلة.",
-                    "en": "No relevant topics found."
-                },
-                "untitled_post": {
-                    "ar": "منشور بدون عنوان",
-                    "en": "Untitled post"
-                },
-                "untitled_topic": {
-                    "ar": "موضوع بدون عنوان", 
-                    "en": "Untitled topic"
-                },
-                "default_excerpt": {
-                    "ar": "موضوع في مجتمع أسس",
-                    "en": "Topic in Aosus community"
-                }
+                "no_results": "No relevant topics found.",
+                "untitled_post": "Untitled post",
+                "untitled_topic": "Untitled topic",
+                "default_excerpt": "Topic in Aosus community"
             },
             "system_messages": {
-                "perfect_match": {
-                    "ar": "وجدت تطابقاً مثالياً لسؤالك:",
-                    "en": "I found a perfect match for your question:"
-                },
-                "closest_match": {
-                    "ar": "إليك أقرب موضوع ذي صلة وجدته:",
-                    "en": "Here's the closest relevant topic I found:"
-                }
+                "perfect_match": "I found a perfect match for your question:",
+                "closest_match": "Here's the closest relevant topic I found:"
             }
         }
     
-    def get_response(self, category: str, key: str, language: str = "ar") -> str:
+    def get_response(self, category: str, key: str) -> str:
         """
         Get a response message.
         
         Args:
             category: Response category (error_messages, discourse_messages, etc.)
             key: Specific response key
-            language: Language code (ar, en)
             
         Returns:
-            The response message in the requested language, falling back to Arabic
+            The response message, falling back to a generic error message if not found
         """
         try:
             category_responses = self.responses.get(category, {})
-            message_variants = category_responses.get(key, {})
+            message = category_responses.get(key)
             
-            # Try requested language first, then fall back to Arabic, then English
-            if language in message_variants:
-                return message_variants[language]
-            elif "ar" in message_variants:
-                return message_variants["ar"]  
-            elif "en" in message_variants:
-                return message_variants["en"]
+            if message:
+                return message
             else:
                 # Final fallback to a generic message
-                return "عذراً، حدث خطأ غير متوقع"
+                return "Sorry, an unexpected error occurred"
                 
         except Exception as e:
-            logger.error(f"Error getting response {category}.{key}.{language}: {e}")
-            return "عذراً، حدث خطأ غير متوقع"
+            logger.error(f"Error getting response {category}.{key}: {e}")
+            return "Sorry, an unexpected error occurred"
     
-    def get_error_message(self, error_type: str, language: str = "ar") -> str:
+    def get_error_message(self, error_type: str) -> str:
         """Get an error message."""
-        return self.get_response("error_messages", error_type, language)
+        return self.get_response("error_messages", error_type)
     
-    def get_discourse_message(self, message_type: str, language: str = "ar") -> str:
+    def get_discourse_message(self, message_type: str) -> str:
         """Get a discourse-related message.""" 
-        return self.get_response("discourse_messages", message_type, language)
+        return self.get_response("discourse_messages", message_type)
         
-    def get_system_message(self, message_type: str, language: str = "ar") -> str:
+    def get_system_message(self, message_type: str) -> str:
         """Get a system message."""
-        return self.get_response("system_messages", message_type, language)
+        return self.get_response("system_messages", message_type)

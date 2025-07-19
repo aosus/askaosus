@@ -23,34 +23,23 @@ def test_response_config():
     config = ResponseConfig("/home/runner/work/askaosus/askaosus/responses.json")
     
     # Test getting various responses
-    no_results_ar = config.get_error_message("no_results_found", "ar")
-    no_results_en = config.get_error_message("no_results_found", "en")
-    untitled_post = config.get_discourse_message("untitled_post", "ar")
+    no_results = config.get_error_message("no_results_found")
+    untitled_post = config.get_discourse_message("untitled_post")
     
-    print(f"  Arabic no results: {no_results_ar[:50]}...")
-    print(f"  English no results: {no_results_en[:50]}...")
+    print(f"  No results: {no_results[:50]}...")
     print(f"  Untitled post: {untitled_post}")
     
     # Test 2: Fallback to defaults when file doesn't exist
     print("✓ Test 2: Fallback to defaults when file missing")
     config_missing = ResponseConfig("/nonexistent/path/responses.json")
-    fallback_message = config_missing.get_error_message("processing_error", "ar")
+    fallback_message = config_missing.get_error_message("processing_error")
     print(f"  Fallback message: {fallback_message[:50]}...")
     
-    # Test 3: Language fallback
-    print("✓ Test 3: Language fallback")
-    # Test with an invalid language - should fall back to Arabic
-    fallback_lang = config.get_error_message("no_results_found", "fr")
-    print(f"  French->Arabic fallback: {fallback_lang[:50]}...")
-    
-    # Test 4: Custom config file
-    print("✓ Test 4: Custom configuration file")
+    # Test 3: Custom config file
+    print("✓ Test 3: Custom configuration file")
     custom_responses = {
         "error_messages": {
-            "test_error": {
-                "en": "Custom test error message",
-                "ar": "رسالة خطأ تجريبية مخصصة"
-            }
+            "test_error": "Custom test error message"
         }
     }
     
@@ -61,11 +50,11 @@ def test_response_config():
     
     try:
         custom_config = ResponseConfig(temp_path)
-        custom_message = custom_config.get_error_message("test_error", "en")
+        custom_message = custom_config.get_error_message("test_error")
         print(f"  Custom message: {custom_message}")
         
         # Test fallback for missing key
-        missing_key = custom_config.get_error_message("missing_key", "en")
+        missing_key = custom_config.get_error_message("missing_key")
         print(f"  Missing key fallback: {missing_key}")
         
     finally:
@@ -99,12 +88,8 @@ def test_integration():
         for key in keys:
             if key not in responses[category]:
                 missing_keys.append(f"Missing key: {category}.{key}")
-            else:
-                # Check that both ar and en languages exist
-                if "ar" not in responses[category][key]:
-                    missing_keys.append(f"Missing Arabic translation: {category}.{key}.ar")
-                if "en" not in responses[category][key]:
-                    missing_keys.append(f"Missing English translation: {category}.{key}.en")
+            elif not isinstance(responses[category][key], str):
+                missing_keys.append(f"Invalid type for key: {category}.{key} (expected string)")
     
     if missing_keys:
         print("❌ Integration test failed:")
@@ -112,7 +97,7 @@ def test_integration():
             print(f"  {error}")
         return False
     
-    print("✓ All required response keys and translations present")
+    print("✓ All required response keys present and valid")
     print("🎉 Integration test passed!")
     return True
 

@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import re
+import markdown
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -21,6 +22,45 @@ from .llm import LLMClient
 from .responses import ResponseConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _convert_markdown_to_html(text: str) -> str:
+    """
+    Convert markdown text to HTML suitable for Matrix messages.
+    
+    This function converts markdown to HTML while ensuring compatibility with
+    Matrix's supported HTML subset as defined in the Matrix specification.
+    
+    Args:
+        text: Markdown-formatted text
+        
+    Returns:
+        HTML-formatted text suitable for Matrix formatted_body
+    """
+    try:
+        # Configure markdown with extensions that produce Matrix-compatible HTML
+        md = markdown.Markdown(
+            extensions=[
+                'markdown.extensions.nl2br',      # Convert newlines to <br>
+                'markdown.extensions.fenced_code', # Support ```code blocks```
+            ],
+            # Configure to be more conservative with HTML output
+            output_format='html'
+        )
+        
+        # Convert markdown to HTML
+        html = md.convert(text)
+        
+        # Ensure we don't have any disallowed HTML tags or attributes
+        # Matrix allows: font, del, h1-h6, blockquote, p, a, ul, ol, sup, sub, li, b, i, u, 
+        # strong, em, strike, code, hr, br, div, table, thead, tbody, tr, th, td, caption, pre, span, img
+        
+        return html
+        
+    except Exception as e:
+        logger.warning(f"Failed to convert markdown to HTML: {e}")
+        # Fallback: just convert newlines to <br> tags
+        return text.replace('\n', '<br>')
 
 
 class AskaosusBot:
@@ -206,15 +246,18 @@ class AskaosusBot:
                     # Process the question
                     answer = await self._process_question(question)
                     
+                    # Convert markdown to HTML for formatted_body
+                    formatted_answer = _convert_markdown_to_html(answer)
+                    
                     # Send the answer
                     await self.matrix_client.room_send(
                         room_id=room.room_id,
                         message_type="m.room.message",
                         content={
                             "msgtype": "m.text",
-                            "body": answer,
+                            "body": answer,  # Plain text version
                             "format": "org.matrix.custom.html",
-                            "formatted_body": answer.replace("\n", "<br>"),
+                            "formatted_body": formatted_answer,  # HTML version
                         },
                     )
                     

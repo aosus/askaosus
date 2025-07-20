@@ -23,6 +23,8 @@ Askaosus is A Python Matrix bot that searches a Discourse forum to answer questi
    docker compose up -d
    ```
 
+
+**tags: latest/main and there's a tag for each release**
 ## Development
 
 For development with hot reloading (no Docker needed):

@@ -1,0 +1,56 @@
+version: '3.8'
+
+# Test Docker Compose setup that validates environment variables
+# work correctly without mounting a .env file
+services:
+  askaosus-bot-test:
+    build: .
+    container_name: askaosus-test-env-vars
+    # Don't use restart policy for testing
+    volumes:
+      - test-data:/app/data
+      - test-logs:/app/logs
+    environment:
+      # Python configuration
+      - PYTHONUNBUFFERED=1
+      
+      # Matrix Configuration (test values)
+      - MATRIX_HOMESERVER_URL=https://matrix.test.org
+      - MATRIX_USER_ID=@testbot:matrix.test.org
+      - MATRIX_PASSWORD=test_password_123
+      - MATRIX_DEVICE_NAME=askaosus-test-device
+      - MATRIX_STORE_PATH=/app/data/matrix_store
+      
+      # Discourse Configuration (test values)
+      - DISCOURSE_BASE_URL=https://discourse.test.org
+      - DISCOURSE_API_KEY=test_discourse_key_123
+      - DISCOURSE_USERNAME=testuser
+      
+      # LLM Configuration (test values)
+      - LLM_PROVIDER=openai
+      - LLM_API_KEY=test_llm_key_123
+      - LLM_BASE_URL=https://api.openai.com/v1
+      - LLM_MODEL=gpt-3.5-turbo
+      - LLM_MAX_TOKENS=500
+      - LLM_TEMPERATURE=0.7
+      
+      # Bot Behavior Configuration
+      - BOT_RATE_LIMIT_SECONDS=1.0
+      - BOT_MAX_SEARCH_RESULTS=5
+      - BOT_MAX_SEARCH_ITERATIONS=3
+      - BOT_DEBUG=true
+      
+      # Logging Configuration
+      - LOG_LEVEL=DEBUG
+    networks:
+      - test-network
+    # Override the default command to just test configuration loading
+    command: ["python", "-c", "from src.config import Config; config = Config(); print('✓ Configuration loaded successfully in Docker container')"]
+
+networks:
+  test-network:
+    driver: bridge
+
+volumes:
+  test-data:
+  test-logs:

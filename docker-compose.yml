@@ -1,13 +1,11 @@
-version: '3.8'
-
 services:
   askaosus-bot:
-    build: .
-    container_name: askaosus-matrix-bot
-    restart: unless-stopped
+    image: ghcr.io/aosus/askaosus:latest
     volumes:
       - askaosus-data:/app/data
       - askaosus-logs:/app/logs
+      # - ./system_prompt.md:/app/system_prompt.md
+      # - ./responses.json:/app/responses.json
     environment:
       # Python configuration
       - PYTHONUNBUFFERED=1
@@ -39,12 +37,8 @@ services:
       
       # Logging Configuration
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    networks:
-      - askaosus-network
+      #- BOT_UTM_TAGS="ref=askaosus&utm_medium=chat&utm_campaign=ai"
 
-networks:
-  askaosus-network:
-    driver: bridge
 
 volumes:
   askaosus-data:

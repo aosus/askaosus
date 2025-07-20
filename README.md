@@ -1,6 +1,6 @@
-# Matrix Discourse Bot
+# Matrix Askaosus Bot
 
-A Python Matrix bot that searches Discourse forums to answer questions with intelligent context handling.
+Askaosus is A Python Matrix bot that searches a Discourse forum to answer questions with intelligent context handling.
 
 ## Features
 
@@ -8,6 +8,7 @@ A Python Matrix bot that searches Discourse forums to answer questions with inte
 - **Smart context handling**: Automatically includes replied-to messages when mentioned in replies
 - Searches Discourse forum posts to find relevant answers
 - Supports multiple LLM providers (OpenAI, OpenRouter, Gemini)
+- **Configurable responses**: Customizable bot messages in multiple languages
 - Robust error handling with graceful fallbacks
 - Configurable through environment variables
 - Dockerized for easy deployment
@@ -148,6 +149,17 @@ The bot is configured through environment variables that can be set in your shel
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
 | `LOG_LEVEL` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | `INFO` | ❌ |
+
+### Response Customization
+
+The bot's responses can be customized through a `responses.json` file. This allows changing error messages, labels, and system responses without modifying code.
+
+- **Location**: The bot looks for `responses.json` in `/app/responses.json` (production) or current directory (development)
+- **Multi-language**: Supports Arabic and English responses with automatic fallback
+- **Categories**: Error messages, Discourse labels, and system messages
+- **Documentation**: See [docs/configurable-responses.md](docs/configurable-responses.md) for full details
+
+If no configuration file is found, the bot uses built-in default responses.
 
 ## Usage Examples
 

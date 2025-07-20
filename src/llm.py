@@ -6,6 +6,7 @@ from openai import OpenAI, AsyncOpenAI
 
 from .config import Config
 from .discourse import DiscoursePost, DiscourseSearcher
+from .responses import ResponseConfig
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +18,9 @@ class LLMClient:
         """Initialize the LLM client."""
         self.config = config
         self.discourse_searcher = discourse_searcher
+        
+        # Initialize response configuration
+        self.response_config = ResponseConfig()
         
         # Initialize OpenAI-compatible client
         client_kwargs = config.get_openai_client_kwargs()
@@ -205,7 +209,7 @@ Inform the user when no relevant results could be found.
                         if function_name == "search_discourse":
                             if search_attempts >= self.max_search_attempts:
                                 # Force no result if max attempts reached
-                                final_response = "عذراً، لم أتمكن من العثور على موضوعات ذات صلة بسؤالك. يرجى المحاولة بصيغة مختلفة أو زيارة المنتدى مباشرة: https://discourse.aosus.org"
+                                final_response = self.response_config.get_error_message("no_results_found")
                                 break
                                 
                             query = function_args.get("query", "")
@@ -248,7 +252,7 @@ Inform the user when no relevant results could be found.
                             break
                             
                         elif function_name == "no_result_message":
-                            final_response = "عذراً، لم أتمكن من العثور على موضوعات ذات صلة بسؤالك. يرجى المحاولة بصيغة مختلفة أو زيارة المنتدى مباشرة: https://discourse.aosus.org"
+                            final_response = self.response_config.get_error_message("no_results_found")
                             break
                 
                 # Check if we have a final response
@@ -262,7 +266,7 @@ Inform the user when no relevant results could be found.
             
             # Fallback if no response generated
             if not final_response:
-                final_response = "عذراً، لم أتمكن من معالجة سؤالك. يرجى المحاولة مرة أخرى أو زيارة المنتدى مباشرة: https://discourse.aosus.org"
+                final_response = self.response_config.get_error_message("fallback_error")
             
             # Log token usage
             if response and hasattr(response, 'usage') and response.usage:
@@ -272,12 +276,12 @@ Inform the user when no relevant results could be found.
             
         except Exception as e:
             logger.error(f"Error processing question with tools: {e}", exc_info=True)
-            return "عذراً، حدث خطأ أثناء معالجة سؤالك. يرجى المحاولة مرة أخرى أو زيارة المنتدى مباشرة: https://discourse.aosus.org"
+            return self.response_config.get_error_message("processing_error")
     
     def _format_search_results(self, search_results: List[DiscoursePost]) -> str:
         """Format search results for the LLM."""
         if not search_results:
-            return "No relevant topics found."
+            return self.response_config.get_discourse_message("no_results")
         
         formatted_results = []
         for i, post in enumerate(search_results, 1):

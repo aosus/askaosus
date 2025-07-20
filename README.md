@@ -1,6 +1,6 @@
-# Matrix Discourse Bot
+# Matrix Askaosus Bot
 
-A Python Matrix bot that searches Discourse forums to answer questions with intelligent context handling.
+Askaosus is A Python Matrix bot that searches a Discourse forum to answer questions with intelligent context handling.
 
 ## Features
 

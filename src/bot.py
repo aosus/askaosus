@@ -219,9 +219,17 @@ class AskaosusBot:
         
         # Skip old messages (messages sent before bot started)
         if self.start_time and hasattr(event, 'server_timestamp') and event.server_timestamp:
-            if event.server_timestamp < self.start_time:
-                logger.debug(f"Skipping old message from {event.sender}: {event.body[:50]}...")
-                return
+            # Validate timestamp is a reasonable value
+            try:
+                if isinstance(event.server_timestamp, (int, float)) and event.server_timestamp > 0:
+                    if event.server_timestamp < self.start_time:
+                        logger.debug(f"Skipping old message from {event.sender}: {event.body[:50] if event.body else '[no body]'}...")
+                        return
+                else:
+                    logger.debug(f"Invalid timestamp format: {event.server_timestamp}")
+            except Exception as e:
+                logger.debug(f"Error validating timestamp: {e}")
+                # Continue processing if timestamp validation fails
         
         # Check rate limiting
         current_time = asyncio.get_event_loop().time()
@@ -230,11 +238,16 @@ class AskaosusBot:
             return
         
         try:
+            # Validate event has required properties
+            if not hasattr(event, 'body'):
+                logger.debug("Event missing body property")
+                return
+            
             # Check if the bot should respond to this message
             question, should_respond = await self._should_respond(room, event)
             
             if should_respond and question:
-                logger.info(f"Processing question in room {room.room_id}: {question[:100]}...")
+                logger.info(f"Processing question in room {room.room_id}: {question[:100] if len(question) > 100 else question}...")
                 
                 # Update rate limit
                 self.last_message_time = current_time
@@ -245,6 +258,11 @@ class AskaosusBot:
                 try:
                     # Process the question
                     answer = await self._process_question(question)
+                    
+                    # Validate answer before sending
+                    if not answer or len(answer.strip()) == 0:
+                        logger.warning("LLM returned empty answer")
+                        answer = "I apologize, but I couldn't generate a proper response. Please try asking your question again."
                     
                     # Convert markdown to HTML for formatted_body
                     formatted_answer = _convert_markdown_to_html(answer)
@@ -295,25 +313,52 @@ class AskaosusBot:
         # Build a list of events by following the reply chain backwards
         events_chain = [current_event]
         
-        while True:
-            if not hasattr(current_event, 'source') or 'content' not in current_event.source:
+        # Track visited events to prevent infinite loops
+        visited_event_ids = {current_event.event_id}
+        max_depth = 20  # Reasonable limit for conversation threads
+        depth = 0
+        
+        while depth < max_depth:
+            # Validate event structure before accessing
+            if not hasattr(current_event, 'source') or not isinstance(current_event.source, dict):
+                logger.debug("Event missing source structure, stopping thread building")
                 break
                 
-            content = current_event.source['content']
-            if 'm.relates_to' not in content or 'm.in_reply_to' not in content['m.relates_to']:
+            content = current_event.source.get('content', {})
+            relates_to = content.get('m.relates_to', {})
+            
+            if 'm.in_reply_to' not in relates_to:
                 break
                 
-            original_event_id = content['m.relates_to']['m.in_reply_to']['event_id']
+            original_event_id = relates_to['m.in_reply_to'].get('event_id')
+            if not original_event_id:
+                logger.debug("Missing event_id in reply structure")
+                break
+            
+            # Check for cycles
+            if original_event_id in visited_event_ids:
+                logger.warning(f"Detected reply cycle involving event {original_event_id}, stopping thread building")
+                break
             
             try:
-                original_response = await self.matrix_client.room_get_event(room.room_id, original_event_id)
+                # Add timeout to prevent hanging
+                original_response = await asyncio.wait_for(
+                    self.matrix_client.room_get_event(room.room_id, original_event_id),
+                    timeout=5.0
+                )
                 
                 if isinstance(original_response, RoomGetEventResponse):
                     original_event = original_response.event
                     events_chain.append(original_event)
+                    visited_event_ids.add(original_event_id)
                     current_event = original_event
+                    depth += 1
                 else:
+                    logger.debug(f"Failed to fetch event {original_event_id}: {original_response}")
                     break
+            except asyncio.TimeoutError:
+                logger.warning(f"Timeout fetching event {original_event_id}")
+                break
             except Exception as e:
                 logger.debug(f"Error fetching event {original_event_id}: {e}")
                 break
@@ -325,20 +370,15 @@ class AskaosusBot:
         for i, evt in enumerate(events_chain):
             if isinstance(evt, RoomMessageText):
                 sender_display = "Bot" if evt.sender == self.matrix_client.user_id else "User"
-                message_content = evt.body.strip()
+                message_content = evt.body.strip() if evt.body else ""
                 
                 # For the first message in a thread, remove bot mentions to get clean question
                 if i == 0 and sender_display == "User":
-                    for mention in self.config.bot_mentions:
-                        # Remove mentions more comprehensively
-                        patterns = [
-                            rf"\b{re.escape(mention)}\b",  # Exact mention
-                            rf"@{re.escape(mention.lstrip('@'))}\b",  # @mention variant
-                            rf"\b{re.escape(mention.lstrip('@'))}\b",  # mention without @
-                        ]
-                        for pattern in patterns:
-                            message_content = re.sub(pattern, "", message_content, flags=re.IGNORECASE)
-                    message_content = re.sub(r'\s+', ' ', message_content).strip()  # Clean up extra spaces
+                    message_content = self._remove_mentions_from_text(message_content)
+                
+                # Handle empty messages after mention removal
+                if not message_content and i == 0:
+                    message_content = "[mention only]"
                 
                 conversation.append(f"{sender_display}: {message_content}")
             else:
@@ -349,14 +389,53 @@ class AskaosusBot:
         
         if len(conversation) > 1:
             context = "Conversation thread:\n" + "\n".join(conversation)
-            logger.debug(f"Built conversation thread with {len(conversation)} messages")
+            logger.debug(f"Built conversation thread with {len(conversation)} messages (depth limit: {max_depth})")
             return context
         elif len(conversation) == 1:
             # Single message, just return the content
             return conversation[0].split(": ", 1)[1] if ": " in conversation[0] else conversation[0]
         else:
             # Fallback to current message content
-            return event.body.strip()
+            return event.body.strip() if hasattr(event, 'body') and event.body else "[empty message]"
+
+    def _remove_mentions_from_text(self, text: str) -> str:
+        """
+        Remove bot mentions from text with improved regex patterns.
+        
+        Handles edge cases like punctuation and ensures clean output.
+        
+        Args:
+            text: Text containing potential mentions
+            
+        Returns:
+            Text with mentions removed and cleaned up
+        """
+        if not text:
+            return ""
+        
+        result = text
+        for mention in self.config.bot_mentions:
+            mention_clean = mention.lstrip('@')  # Remove @ if present
+            
+            # More precise patterns that handle punctuation correctly
+            patterns = [
+                rf'@{re.escape(mention_clean)}\b',  # @mention
+                rf'\b{re.escape(mention)}\b',       # Full mention as configured
+                rf'\b{re.escape(mention_clean)}\b(?=\s*[:\-,])',  # mention followed by punctuation
+                rf'\b{re.escape(mention_clean)}(?=\s*$)',  # mention at end of string
+            ]
+            
+            for pattern in patterns:
+                result = re.sub(pattern, "", result, flags=re.IGNORECASE)
+        
+        # Clean up leftover punctuation and whitespace
+        result = re.sub(r'^[\s:,\-]+', '', result)  # Remove leading punctuation
+        result = re.sub(r'\s*[,]\s+', ' ', result)   # Clean up orphaned commas with spaces
+        result = re.sub(r'\s+[,]', ',', result)      # Fix spaced commas 
+        result = re.sub(r'\s+', ' ', result)         # Normalize whitespace
+        result = result.strip()
+        
+        return result
 
     async def _is_reply_to_bot_message(self, room: MatrixRoom, event: RoomMessageText) -> bool:
         """
@@ -365,23 +444,38 @@ class AskaosusBot:
         Returns:
             True if the message is replying to a bot message, False otherwise
         """
-        if not hasattr(event, 'source') or 'content' not in event.source:
+        # Validate event structure
+        if not hasattr(event, 'source') or not isinstance(event.source, dict):
             return False
         
-        content = event.source['content']
-        if 'm.relates_to' not in content or 'm.in_reply_to' not in content['m.relates_to']:
+        content = event.source.get('content', {})
+        relates_to = content.get('m.relates_to', {})
+        
+        if 'm.in_reply_to' not in relates_to:
             return False
         
-        original_event_id = content['m.relates_to']['m.in_reply_to']['event_id']
+        reply_info = relates_to['m.in_reply_to']
+        if not isinstance(reply_info, dict) or 'event_id' not in reply_info:
+            return False
+        
+        original_event_id = reply_info['event_id']
+        if not original_event_id:
+            return False
         
         try:
-            # Fetch the original message to check if it was sent by the bot
-            original_response = await self.matrix_client.room_get_event(room.room_id, original_event_id)
+            # Add timeout to prevent hanging
+            original_response = await asyncio.wait_for(
+                self.matrix_client.room_get_event(room.room_id, original_event_id),
+                timeout=5.0
+            )
             
             if isinstance(original_response, RoomGetEventResponse):
                 original_event = original_response.event
                 # Check if the original message was sent by the bot
                 return original_event.sender == self.matrix_client.user_id
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout checking if reply is to bot message: {original_event_id}")
+            return False
         except Exception as e:
             logger.debug(f"Error checking if reply is to bot message: {e}")
             return False
@@ -411,39 +505,37 @@ class AskaosusBot:
         if mentioned or is_reply_to_bot:
             if mentioned:
                 # Remove the mention from the message to get the question
-                question = message_body
-                for mention in bot_mentions:
-                    # Remove mentions more comprehensively
-                    patterns = [
-                        rf"\b{re.escape(mention)}\b",  # Exact mention
-                        rf"@{re.escape(mention.lstrip('@'))}\b",  # @mention variant
-                        rf"\b{re.escape(mention.lstrip('@'))}\b",  # mention without @
-                    ]
-                    for pattern in patterns:
-                        question = re.sub(pattern, "", question, flags=re.IGNORECASE)
-                question = re.sub(r'\s+', ' ', question).strip()  # Clean up extra spaces
+                question = self._remove_mentions_from_text(message_body)
+                
+                # Handle empty messages after mention removal
+                if not question:
+                    question = "[mention only]"
                 
                 # Check if this is a reply to another message for context
                 replied_to_content = None
                 is_reply = False
                 
-                if hasattr(event, 'source') and 'content' in event.source:
-                    content = event.source['content']
-                    if 'm.relates_to' in content and 'm.in_reply_to' in content['m.relates_to']:
+                if hasattr(event, 'source') and isinstance(event.source, dict):
+                    content = event.source.get('content', {})
+                    relates_to = content.get('m.relates_to', {})
+                    if 'm.in_reply_to' in relates_to and relates_to['m.in_reply_to'].get('event_id'):
                         is_reply = True
-                        original_event_id = content['m.relates_to']['m.in_reply_to']['event_id']
+                        original_event_id = relates_to['m.in_reply_to']['event_id']
                         
                         # Always attempt to fetch the original message for context
                         try:
                             logger.debug(f"Fetching replied-to message: {original_event_id}")
-                            original_response = await self.matrix_client.room_get_event(room.room_id, original_event_id)
+                            original_response = await asyncio.wait_for(
+                                self.matrix_client.room_get_event(room.room_id, original_event_id),
+                                timeout=5.0
+                            )
                             
                             # Check if the response is successful and contains a message event
                             if isinstance(original_response, RoomGetEventResponse):
                                 original_event = original_response.event
                                 # Handle different types of events
                                 if isinstance(original_event, RoomMessageText):
-                                    replied_to_content = original_event.body
+                                    replied_to_content = original_event.body or "[empty message]"
                                     logger.debug(f"Retrieved replied-to message content: {replied_to_content[:100]}...")
                                 else:
                                     # Handle non-text events (images, files, etc.)
@@ -453,6 +545,9 @@ class AskaosusBot:
                             else:
                                 logger.warning(f"Failed to fetch original message {original_event_id}: {original_response}")
                                 replied_to_content = "[Original message could not be retrieved]"
+                        except asyncio.TimeoutError:
+                            logger.warning(f"Timeout fetching replied-to message: {original_event_id}")
+                            replied_to_content = "[Original message could not be retrieved - timeout]"
                         except Exception as e:
                             logger.warning(f"Error fetching replied-to message: {e}")
                             replied_to_content = "[Original message could not be retrieved]"

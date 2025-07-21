@@ -45,7 +45,8 @@ Successfully implemented functionality for the Askaosus Matrix Bot to watch and 
 - ✅ Builds complete conversation threads for full context (NEW)
 - ✅ Supports multi-turn conversations without requiring mentions in replies (NEW)
 - ✅ Maintains conversation history for better LLM context (NEW)
-- ✅ Ignores replies to other users' messages (appropriate behavior)
+- ✅ **Supports multi-user participation** - any user can reply to bot messages (NEW)
+- ✅ Enables collaborative help in public channels (NEW)
 
 ## Test Coverage
 
@@ -58,7 +59,7 @@ Successfully implemented functionality for the Askaosus Matrix Bot to watch and 
 
 ### Manual Verification
 - ✅ Simple conversation flows (question → answer → follow-up)
-- ✅ Multi-user scenarios (ignoring other users' replies)  
+- ✅ Multi-user collaborative scenarios (multiple users can reply to bot)  
 - ✅ Edge cases (mention + reply, empty messages, etc.)
 - ✅ Long conversation threads (extended back-and-forth)
 - ✅ Various mention formats (@askaosus, askaosus)
@@ -90,20 +91,22 @@ Bob: The driver installation failed
 Bot: [Has full context of WiFi issue and previous steps tried]
 ```
 
-### Example 3: Multi-User Room
+### Example 3: Multi-User Collaborative Help
 ```
 Alice: @askaosus What's the best text editor?
 Bot: Vim and VS Code are popular choices...
-Bob: I disagree about Vim [reply to bot - IGNORED because Bob didn't ask original question]  
-Alice: What about for beginners? [reply to bot - RESPONDED because Alice asked original question]
+Bob: What about for Python development? [reply to bot - RESPONDED, collaborative help supported]
+Charlie: Any lightweight alternatives? [reply to bot - RESPONDED, multiple users can participate]
+Alice: What about for beginners? [reply to bot - RESPONDED with full conversation context]
 ```
 
 ## Benefits
 1. **Better User Experience**: Users don't need to mention bot in every reply
 2. **Improved Context**: LLM gets full conversation history for better responses  
 3. **Natural Conversations**: Supports multi-turn discussions like human conversations
-4. **Focused Responses**: Bot only responds to relevant replies (from original questioner)
-5. **Refined Search**: LLM can refine search queries based on conversation progression
+4. **Collaborative Help**: Any user can participate by replying to bot messages - perfect for public channels
+5. **Multi-user Support**: Multiple users can continue conversations and ask follow-up questions
+6. **Refined Search**: LLM can refine search queries based on conversation progression
 
 ## Deployment Ready
 - ✅ All tests passing

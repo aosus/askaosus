@@ -275,6 +275,112 @@ class AskaosusBot:
             except:
                 pass
     
+    async def _build_conversation_thread(self, room: MatrixRoom, event: RoomMessageText) -> str:
+        """
+        Build the complete conversation thread by following the reply chain.
+        
+        This method traces back through the reply chain to find the original message
+        and then builds a chronological context of the conversation.
+        
+        Args:
+            room: The Matrix room
+            event: The current message event
+            
+        Returns:
+            A formatted string containing the conversation context
+        """
+        conversation = []
+        current_event = event
+        
+        # Build a list of events by following the reply chain backwards
+        events_chain = [current_event]
+        
+        while True:
+            if not hasattr(current_event, 'source') or 'content' not in current_event.source:
+                break
+                
+            content = current_event.source['content']
+            if 'm.relates_to' not in content or 'm.in_reply_to' not in content['m.relates_to']:
+                break
+                
+            original_event_id = content['m.relates_to']['m.in_reply_to']['event_id']
+            
+            try:
+                original_response = await self.matrix_client.room_get_event(room.room_id, original_event_id)
+                
+                if isinstance(original_response, RoomGetEventResponse):
+                    original_event = original_response.event
+                    events_chain.append(original_event)
+                    current_event = original_event
+                else:
+                    break
+            except Exception as e:
+                logger.debug(f"Error fetching event {original_event_id}: {e}")
+                break
+        
+        # Reverse the chain to get chronological order (oldest to newest)
+        events_chain.reverse()
+        
+        # Build the conversation context
+        for i, evt in enumerate(events_chain):
+            if isinstance(evt, RoomMessageText):
+                sender_display = "Bot" if evt.sender == self.matrix_client.user_id else "User"
+                message_content = evt.body.strip()
+                
+                # For the first message in a thread, remove bot mentions to get clean question
+                if i == 0 and sender_display == "User":
+                    for mention in self.config.bot_mentions:
+                        message_content = re.sub(rf"\b{re.escape(mention)}\b", "", message_content, flags=re.IGNORECASE)
+                    message_content = message_content.strip()
+                
+                conversation.append(f"{sender_display}: {message_content}")
+            else:
+                # Handle non-text events
+                event_type = type(evt).__name__
+                sender_display = "Bot" if evt.sender == self.matrix_client.user_id else "User"
+                conversation.append(f"{sender_display}: [{event_type} - non-text content]")
+        
+        if len(conversation) > 1:
+            context = "Conversation thread:\n" + "\n".join(conversation)
+            logger.debug(f"Built conversation thread with {len(conversation)} messages")
+            return context
+        elif len(conversation) == 1:
+            # Single message, just return the content
+            return conversation[0].split(": ", 1)[1] if ": " in conversation[0] else conversation[0]
+        else:
+            # Fallback to current message content
+            return event.body.strip()
+
+    async def _is_reply_to_bot_message(self, room: MatrixRoom, event: RoomMessageText) -> bool:
+        """
+        Check if the message is a reply to one of the bot's own messages.
+        
+        Returns:
+            True if the message is replying to a bot message, False otherwise
+        """
+        if not hasattr(event, 'source') or 'content' not in event.source:
+            return False
+        
+        content = event.source['content']
+        if 'm.relates_to' not in content or 'm.in_reply_to' not in content['m.relates_to']:
+            return False
+        
+        original_event_id = content['m.relates_to']['m.in_reply_to']['event_id']
+        
+        try:
+            # Fetch the original message to check if it was sent by the bot
+            original_response = await self.matrix_client.room_get_event(room.room_id, original_event_id)
+            
+            if isinstance(original_response, RoomGetEventResponse):
+                original_event = original_response.event
+                # Check if the original message was sent by the bot
+                return original_event.sender == self.matrix_client.user_id
+        except Exception as e:
+            logger.debug(f"Error checking if reply is to bot message: {e}")
+            return False
+        
+        return False
+
     async def _should_respond(self, room: MatrixRoom, event: RoomMessageText) -> Tuple[Optional[str], bool]:
         """
         Determine if the bot should respond to a message and extract the question.
@@ -291,60 +397,71 @@ class AskaosusBot:
         message_lower = message_body.lower()
         mentioned = any(mention in message_lower for mention in bot_mentions)
         
-        if mentioned:
-            # Remove the mention from the message to get the question
-            question = message_body
-            for mention in bot_mentions:
-                question = re.sub(rf"\b{re.escape(mention)}\b", "", question, flags=re.IGNORECASE)
-            question = question.strip()
-            
-            # Check if this is a reply to another message
-            replied_to_content = None
-            is_reply = False
-            
-            if hasattr(event, 'source') and 'content' in event.source:
-                content = event.source['content']
-                if 'm.relates_to' in content and 'm.in_reply_to' in content['m.relates_to']:
-                    is_reply = True
-                    original_event_id = content['m.relates_to']['m.in_reply_to']['event_id']
-                    
-                    # Always attempt to fetch the original message for context
-                    try:
-                        logger.debug(f"Fetching replied-to message: {original_event_id}")
-                        original_response = await self.matrix_client.room_get_event(room.room_id, original_event_id)
-                        
-                        # Check if the response is successful and contains a message event
-                        if isinstance(original_response, RoomGetEventResponse):
-                            original_event = original_response.event
-                            # Handle different types of events
-                            if isinstance(original_event, RoomMessageText):
-                                replied_to_content = original_event.body
-                                logger.debug(f"Retrieved replied-to message content: {replied_to_content[:100]}...")
-                            else:
-                                # Handle non-text events (images, files, etc.)
-                                event_type = type(original_event).__name__
-                                replied_to_content = f"[{event_type} - content not accessible as text]"
-                                logger.debug(f"Original event is not a text message: {event_type}")
-                        else:
-                            logger.warning(f"Failed to fetch original message {original_event_id}: {original_response}")
-                            replied_to_content = "[Original message could not be retrieved]"
-                    except Exception as e:
-                        logger.warning(f"Error fetching replied-to message: {e}")
-                        replied_to_content = "[Original message could not be retrieved]"
-            
-            # Always provide context when this is a reply, even if fetching failed
-            if is_reply:
-                # Ensure we have some context, even if fetching failed
-                if replied_to_content is None:
-                    replied_to_content = "[Original message could not be retrieved]"
+        # Check if this is a reply to a bot message
+        is_reply_to_bot = await self._is_reply_to_bot_message(room, event)
+        
+        # Respond if either mentioned directly or replying to bot message
+        if mentioned or is_reply_to_bot:
+            if mentioned:
+                # Remove the mention from the message to get the question
+                question = message_body
+                for mention in bot_mentions:
+                    question = re.sub(rf"\b{re.escape(mention)}\b", "", question, flags=re.IGNORECASE)
+                question = question.strip()
                 
-                # Create a context string with both messages
-                full_context = f"Original message: {replied_to_content}\n\nReply: {question}"
-                logger.info("Including replied-to message as context for better understanding")
-                return full_context, True
-            elif question:
-                # No replied-to message, just use the mentioning message
-                return question, True
+                # Check if this is a reply to another message for context
+                replied_to_content = None
+                is_reply = False
+                
+                if hasattr(event, 'source') and 'content' in event.source:
+                    content = event.source['content']
+                    if 'm.relates_to' in content and 'm.in_reply_to' in content['m.relates_to']:
+                        is_reply = True
+                        original_event_id = content['m.relates_to']['m.in_reply_to']['event_id']
+                        
+                        # Always attempt to fetch the original message for context
+                        try:
+                            logger.debug(f"Fetching replied-to message: {original_event_id}")
+                            original_response = await self.matrix_client.room_get_event(room.room_id, original_event_id)
+                            
+                            # Check if the response is successful and contains a message event
+                            if isinstance(original_response, RoomGetEventResponse):
+                                original_event = original_response.event
+                                # Handle different types of events
+                                if isinstance(original_event, RoomMessageText):
+                                    replied_to_content = original_event.body
+                                    logger.debug(f"Retrieved replied-to message content: {replied_to_content[:100]}...")
+                                else:
+                                    # Handle non-text events (images, files, etc.)
+                                    event_type = type(original_event).__name__
+                                    replied_to_content = f"[{event_type} - content not accessible as text]"
+                                    logger.debug(f"Original event is not a text message: {event_type}")
+                            else:
+                                logger.warning(f"Failed to fetch original message {original_event_id}: {original_response}")
+                                replied_to_content = "[Original message could not be retrieved]"
+                        except Exception as e:
+                            logger.warning(f"Error fetching replied-to message: {e}")
+                            replied_to_content = "[Original message could not be retrieved]"
+                
+                # Always provide context when this is a reply, even if fetching failed
+                if is_reply:
+                    # Ensure we have some context, even if fetching failed
+                    if replied_to_content is None:
+                        replied_to_content = "[Original message could not be retrieved]"
+                    
+                    # Create a context string with both messages
+                    full_context = f"Original message: {replied_to_content}\n\nReply: {question}"
+                    logger.info("Including replied-to message as context for better understanding")
+                    return full_context, True
+                elif question:
+                    # No replied-to message, just use the mentioning message
+                    return question, True
+            
+            elif is_reply_to_bot:
+                # This is a reply to a bot message, build the full conversation thread
+                logger.info("Message is a reply to bot message, building conversation thread")
+                conversation_context = await self._build_conversation_thread(room, event)
+                return conversation_context, True
         
         return None, False
     

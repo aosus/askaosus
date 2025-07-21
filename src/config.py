@@ -44,6 +44,8 @@ class Config:
         
         # Logging configuration
         self.log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+        self.llm_log_level = os.getenv("LLM_LOG_LEVEL", "LLM").upper()
+        self.exclude_matrix_nio_logs = os.getenv("EXCLUDE_MATRIX_NIO_LOGS", "false").lower() == "true"
         
         # Validate configuration
         self._validate()
@@ -94,6 +96,8 @@ class Config:
         logger.info(f"  Bot debug mode: {self.bot_debug}")
         logger.info(f"  UTM tags configured: {'Yes' if self.utm_tags else 'No'}")
         logger.info(f"  Log level: {self.log_level}")
+        logger.info(f"  LLM log level: {self.llm_log_level}")
+        logger.info(f"  Exclude matrix-nio logs: {self.exclude_matrix_nio_logs}")
     
     def get_openai_client_kwargs(self) -> dict:
         """Get kwargs for OpenAI client initialization."""

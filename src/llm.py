@@ -7,8 +7,9 @@ from openai import OpenAI, AsyncOpenAI
 from .config import Config
 from .discourse import DiscoursePost, DiscourseSearcher
 from .responses import ResponseConfig
+from .logging_utils import get_llm_logger, LLM_LEVEL
 
-logger = logging.getLogger(__name__)
+logger = get_llm_logger(__name__)
 
 
 class LLMClient:
@@ -116,7 +117,8 @@ Inform the user when no relevant results could be found.
             The final response message
         """
         try:
-            logger.info(f"Processing question with tools: {question}")
+            logger.llm(f"Processing question with tools: {question}")
+            logger.llm(f"System prompt length: {len(self.system_prompt)} characters")
             
             # Define tools for the LLM - using simpler dict structure
             tools = [
@@ -183,7 +185,8 @@ Inform the user when no relevant results could be found.
             response = None
             
             while search_attempts < self.max_search_attempts:
-                logger.info(f"LLM attempt {search_attempts + 1}")
+                logger.llm(f"LLM attempt {search_attempts + 1}/{self.max_search_attempts}")
+                logger.llm(f"Sending {len(messages)} messages to LLM (model: {self.config.llm_model})")
                 
                 # Call LLM with tools
                 response = await self.client.chat.completions.create(
@@ -197,26 +200,44 @@ Inform the user when no relevant results could be found.
                 
                 message = response.choices[0].message
                 
+                # Log the LLM response details
+                logger.llm(f"LLM response received - finish_reason: {response.choices[0].finish_reason}")
+                if message.content:
+                    logger.llm(f"LLM response content: {message.content}")
+                else:
+                    logger.llm("LLM response contains no text content (tool calls only)")
+                
+                if message.tool_calls:
+                    logger.llm(f"LLM requested {len(message.tool_calls)} tool call(s)")
+                    for i, tool_call in enumerate(message.tool_calls, 1):
+                        logger.llm(f"Tool call {i}: {tool_call.function.name}")
+                else:
+                    logger.llm("LLM made no tool calls")
+                
                 # Check if the LLM wants to use tools
                 if message.tool_calls:
                     for tool_call in message.tool_calls:
                         function_name = tool_call.function.name
                         function_args = json.loads(tool_call.function.arguments)
                         
-                        logger.info(f"LLM called function: {function_name}")
+                        logger.llm(f"Executing function: {function_name}")
                         logger.debug(f"Function arguments: {function_args}")
                         
                         if function_name == "search_discourse":
                             if search_attempts >= self.max_search_attempts:
                                 # Force no result if max attempts reached
+                                logger.llm("Maximum search attempts reached, forcing no result message")
                                 final_response = self.response_config.get_error_message("no_results_found")
                                 break
                                 
                             query = function_args.get("query", "")
+                            logger.llm(f"Searching Discourse with query: '{query}'")
                             search_results = await self.discourse_searcher.search(query)
+                            logger.llm(f"Discourse search returned {len(search_results)} results")
                             
                             # Format search results for the LLM
                             search_context = self._format_search_results(search_results)
+                            logger.llm(f"Formatted search context length: {len(search_context)} characters")
                             
                             messages.append({
                                 "role": "assistant",
@@ -245,14 +266,22 @@ Inform the user when no relevant results could be found.
                             url = function_args.get("url", "")
                             message = function_args.get("message", "")
                             
+                            logger.llm(f"LLM selected URL to send: {url}")
+                            logger.llm(f"LLM message: {message}")
+                            
                             # Add UTM tags to the URL if configured
                             url_with_utm = self.config.add_utm_tags_to_url(url)
+                            if url != url_with_utm:
+                                logger.llm(f"URL with UTM tags: {url_with_utm}")
                             
                             final_response = f"{message}\n\n{url_with_utm}"
+                            logger.llm(f"Final response prepared: {final_response}")
                             break
                             
                         elif function_name == "no_result_message":
+                            logger.llm("LLM determined no relevant results found")
                             final_response = self.response_config.get_error_message("no_results_found")
+                            logger.llm(f"No result message: {final_response}")
                             break
                 
                 # Check if we have a final response
@@ -262,20 +291,24 @@ Inform the user when no relevant results could be found.
                 # If no tool calls and no final response, use the content
                 if message.content and not message.tool_calls:
                     final_response = message.content.strip()
+                    logger.llm(f"Using LLM direct response: {final_response}")
                     break
             
             # Fallback if no response generated
             if not final_response:
                 final_response = self.response_config.get_error_message("fallback_error")
+                logger.llm(f"Using fallback response: {final_response}")
             
             # Log token usage
             if response and hasattr(response, 'usage') and response.usage:
-                logger.info(f"Token usage - prompt: {response.usage.prompt_tokens}, completion: {response.usage.completion_tokens}, total: {response.usage.total_tokens}")
+                logger.llm(f"Token usage - prompt: {response.usage.prompt_tokens}, completion: {response.usage.completion_tokens}, total: {response.usage.total_tokens}")
             
+            logger.llm(f"Question processing completed successfully")
             return final_response
             
         except Exception as e:
             logger.error(f"Error processing question with tools: {e}", exc_info=True)
+            logger.llm(f"LLM processing failed with error: {e}")
             return self.response_config.get_error_message("processing_error")
     
     def _format_search_results(self, search_results: List[DiscoursePost]) -> str:

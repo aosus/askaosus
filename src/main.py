@@ -10,16 +10,7 @@ load_dotenv(override=False)
 
 from .bot import AskaosusBot
 from .config import Config
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('/app/logs/bot.log')
-    ]
-)
+from .logging_utils import configure_logging
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +47,16 @@ async def main():
     try:
         # Load configuration
         config = Config()
+        
+        # Configure logging with our custom setup
+        configure_logging(
+            log_level=config.log_level,
+            logs_dir='/app/logs',
+            exclude_matrix_nio=config.exclude_matrix_nio_logs
+        )
+        
+        logger.info("Askaosus Matrix Bot starting up...")
+        logger.info(f"Logging configured - level: {config.log_level}, LLM level: {config.llm_log_level}")
         
         # Test Discourse search if in debug mode
         if config.bot_debug:

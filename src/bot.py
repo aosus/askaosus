@@ -330,8 +330,15 @@ class AskaosusBot:
                 # For the first message in a thread, remove bot mentions to get clean question
                 if i == 0 and sender_display == "User":
                     for mention in self.config.bot_mentions:
-                        message_content = re.sub(rf"\b{re.escape(mention)}\b", "", message_content, flags=re.IGNORECASE)
-                    message_content = message_content.strip()
+                        # Remove mentions more comprehensively
+                        patterns = [
+                            rf"\b{re.escape(mention)}\b",  # Exact mention
+                            rf"@{re.escape(mention.lstrip('@'))}\b",  # @mention variant
+                            rf"\b{re.escape(mention.lstrip('@'))}\b",  # mention without @
+                        ]
+                        for pattern in patterns:
+                            message_content = re.sub(pattern, "", message_content, flags=re.IGNORECASE)
+                    message_content = re.sub(r'\s+', ' ', message_content).strip()  # Clean up extra spaces
                 
                 conversation.append(f"{sender_display}: {message_content}")
             else:
@@ -406,8 +413,15 @@ class AskaosusBot:
                 # Remove the mention from the message to get the question
                 question = message_body
                 for mention in bot_mentions:
-                    question = re.sub(rf"\b{re.escape(mention)}\b", "", question, flags=re.IGNORECASE)
-                question = question.strip()
+                    # Remove mentions more comprehensively
+                    patterns = [
+                        rf"\b{re.escape(mention)}\b",  # Exact mention
+                        rf"@{re.escape(mention.lstrip('@'))}\b",  # @mention variant
+                        rf"\b{re.escape(mention.lstrip('@'))}\b",  # mention without @
+                    ]
+                    for pattern in patterns:
+                        question = re.sub(pattern, "", question, flags=re.IGNORECASE)
+                question = re.sub(r'\s+', ' ', question).strip()  # Clean up extra spaces
                 
                 # Check if this is a reply to another message for context
                 replied_to_content = None

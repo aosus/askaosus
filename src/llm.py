@@ -183,6 +183,7 @@ Inform the user when no relevant results could be found.
             search_attempts = 0
             final_response = None
             response = None
+            tool_calls_executed = False
             
             while search_attempts < self.max_search_attempts:
                 logger.llm(f"LLM attempt {search_attempts + 1}/{self.max_search_attempts}")
@@ -216,6 +217,7 @@ Inform the user when no relevant results could be found.
                 
                 # Check if the LLM wants to use tools
                 if message.tool_calls:
+                    tool_calls_executed = True
                     for tool_call in message.tool_calls:
                         function_name = tool_call.function.name
                         function_args = json.loads(tool_call.function.arguments)
@@ -268,6 +270,7 @@ Inform the user when no relevant results could be found.
                             })
                             
                             search_attempts += 1
+                            logger.llm(f"Search context added to conversation, continuing to next LLM call")
                             
                         elif function_name == "send_link":
                             url = function_args.get("url", "")
@@ -293,6 +296,7 @@ Inform the user when no relevant results could be found.
                 
                 # Check if we have a final response
                 if final_response:
+                    logger.llm("Final response received, ending LLM interaction")
                     break
                 
                 # If no tool calls and no final response, use the content
@@ -300,11 +304,24 @@ Inform the user when no relevant results could be found.
                     final_response = message.content.strip()
                     logger.llm(f"Using LLM direct response: {final_response}")
                     break
+                
+                # Log if we're continuing to next iteration
+                if message.tool_calls and not final_response:
+                    logger.llm("Tool calls executed, continuing to next LLM iteration")
+                elif not message.tool_calls and not message.content:
+                    logger.llm("LLM returned no tool calls and no content - this may cause fallback")
+                    break
             
-            # Fallback if no response generated
+            # Enhanced fallback logging
             if not final_response:
+                if search_attempts >= self.max_search_attempts:
+                    logger.llm(f"Using fallback response: Maximum search attempts ({self.max_search_attempts}) reached without send_link or no_result_message")
+                elif tool_calls_executed:
+                    logger.llm("Using fallback response: LLM executed tool calls but never called send_link or no_result_message")
+                else:
+                    logger.llm("Using fallback response: LLM provided no tool calls and no direct response")
+                    
                 final_response = self.response_config.get_error_message("fallback_error")
-                logger.llm(f"Using fallback response: {final_response}")
             
             # Log token usage
             if response and hasattr(response, 'usage') and response.usage:

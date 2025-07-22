@@ -1,18 +1,13 @@
 {
   "error_messages": {
-    "no_results_found": "Sorry, I couldn't find any relevant topics for your question. Please try rephrasing your query or visit the forum directly: https://discourse.aosus.org",
-    "processing_error": "Sorry, an error occurred while processing your question. Please try again later or visit the forum directly: https://discourse.aosus.org",
-    "search_error": "Sorry, an error occurred while searching for an answer. Please try again later or visit the forum directly: https://discourse.aosus.org",
-    "fallback_error": "Sorry, I couldn't process your question. Please try again or visit the forum directly: https://discourse.aosus.org"
+    "rate_limit_error": "The forum is currently receiving too many requests. Please try again in a few moments.",
+    "discourse_unreachable": "The forum is currently unreachable. Please try again later or visit the forum directly: https://discourse.aosus.org",
+    "llm_down": "The AI assistant is currently unavailable. Please try again later or visit the forum directly: https://discourse.aosus.org"
   },
   "discourse_messages": {
     "no_results": "No relevant topics found.",
     "untitled_post": "Untitled post",
     "untitled_topic": "Untitled topic",
     "default_excerpt": "Topic in Aosus community"
-  },
-  "system_messages": {
-    "perfect_match": "I found a perfect match for your question:",
-    "closest_match": "Here's the closest relevant topic I found:"
   }
 }

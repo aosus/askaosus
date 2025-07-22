@@ -12,6 +12,16 @@ from .responses import ResponseConfig
 logger = logging.getLogger(__name__)
 
 
+class DiscourseRateLimitError(Exception):
+    """Raised when Discourse API rate limit is exceeded."""
+    pass
+
+
+class DiscourseConnectionError(Exception):
+    """Raised when Discourse API is unreachable or returns error."""
+    pass
+
+
 @dataclass
 class DiscoursePost:
     """Represents a Discourse forum post."""
@@ -134,14 +144,27 @@ class DiscourseSearcher:
                     logger.debug(f"Parsed {len(results)} valid results")
                     
                     return results
+                elif response.status == 429:
+                    # Rate limit error
+                    logger.warning(f"Rate limit hit when searching Discourse: {response.status}")
+                    raise DiscourseRateLimitError("Rate limit exceeded")
                 else:
                     response_text = await response.text()
                     logger.warning(f"Search failed with status {response.status}: {response_text}")
-                    return []
+                    raise DiscourseConnectionError(f"HTTP {response.status}")
         
+        except aiohttp.ClientError as e:
+            logger.error(f"Connection error when searching Discourse: {e}")
+            raise DiscourseConnectionError(f"Connection failed: {e}")
+        except DiscourseRateLimitError:
+            # Re-raise rate limit errors
+            raise
+        except DiscourseConnectionError:
+            # Re-raise connection errors
+            raise
         except Exception as e:
-            logger.error(f"Error performing search: {e}", exc_info=True)
-            return []
+            logger.error(f"Unexpected error performing search: {e}", exc_info=True)
+            raise DiscourseConnectionError(f"Unexpected error: {e}")
     
     def _parse_search_results(self, data: dict) -> List[DiscoursePost]:
         """Parse Discourse search results into DiscoursePost objects, only including topics."""

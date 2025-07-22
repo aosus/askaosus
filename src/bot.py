@@ -361,4 +361,4 @@ class AskaosusBot:
             
         except Exception as e:
             logger.error(f"Error processing question: {e}", exc_info=True)
-            return self.response_config.get_error_message("search_error")
+            return self.response_config.get_error_message("llm_down")

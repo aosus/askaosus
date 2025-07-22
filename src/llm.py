@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 from openai import OpenAI, AsyncOpenAI
 
 from .config import Config
-from .discourse import DiscoursePost, DiscourseSearcher
+from .discourse import DiscoursePost, DiscourseSearcher, DiscourseRateLimitError, DiscourseConnectionError
 from .responses import ResponseConfig
 from .logging_utils import get_llm_logger, LLM_LEVEL
 
@@ -60,22 +60,12 @@ Use both messages to understand the full context of what the user is asking abou
 
 ## Available Tools
 
-You have access to the following tools:
+You have access to the following tool:
 
 ### search_discourse
 Search the Discourse forum for topics related to the user's query.
 - **query** (string): The search query to execute
 - **Returns**: A list of up to 6 relevant forum topics with their titles, URLs, and first 1000 characters of content
-
-### send_link
-Send a link to the user when you find a relevant topic.
-- **url** (string): The URL of the relevant topic
-- **message** (string): A brief message indicating this is the best match found
-- **Returns**: Confirmation that the message was sent
-
-### no_result_message
-Inform the user when no relevant results could be found.
-- **Returns**: Confirmation that the message was sent
 
 ## Search Process
 
@@ -83,28 +73,16 @@ Inform the user when no relevant results could be found.
 2. **Initial Search**: Search the forum using relevant keywords from the context
 3. **Evaluate Results**: Review the returned topics to determine if any directly address the user's question
 4. **Iterative Search**: If no good results are found, you may perform up to 3 additional searches with refined queries
-5. **Decision Point**: After searching, you must either:
-   - Call `send_link` with the URL of the most relevant topic
-   - Call `no_result_message` if no relevant topics are found
+5. **Provide Answer**: After searching, provide a helpful response based on the search results
 
 ## Response Guidelines
 
 - **Language**: Respond in the same language as the user's query
-- **Conciseness**: Keep responses brief and to the point
-- **Direct Links**: Only provide the forum link, no additional content from the post
-- **Relevance**: Ensure the linked topic directly addresses or is highly relevant to the user's query
+- **Helpfulness**: Provide useful answers based on the search results
+- **Include Links**: When relevant topics are found, include the topic URLs in your response
+- **Relevance**: Ensure your response directly addresses the user's query
 - **Context Awareness**: When replying to a conversation, acknowledge the context from previous messages
-
-## Examples
-
-**When a perfect match is found:**
-"I found a perfect match for your question: [topic URL]"
-
-**When the closest relevant topic is found:**
-"Here's the closest relevant topic I found: [topic URL]"
-
-**When no results are found:**
-"I couldn't find any relevant topics for your question. Please try rephrasing your query or visit the forum directly."""
+- **No Results**: If no relevant results are found, inform the user and suggest they visit the forum directly"""""
     
     async def process_question_with_tools(self, question: str) -> str:
         """
@@ -120,7 +98,7 @@ Inform the user when no relevant results could be found.
             logger.llm(f"Processing question with tools: {question}")
             logger.llm(f"System prompt length: {len(self.system_prompt)} characters")
             
-            # Define tools for the LLM - using simpler dict structure
+            # Define tools for the LLM - only search_discourse
             tools = [
                 {
                     "type": "function",
@@ -136,38 +114,6 @@ Inform the user when no relevant results could be found.
                                 }
                             },
                             "required": ["query"]
-                        }
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "send_link",
-                        "description": "Send a link to the user when you find a relevant topic",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "url": {
-                                    "type": "string",
-                                    "description": "The URL of the relevant topic"
-                                },
-                                "message": {
-                                    "type": "string",
-                                    "description": "A brief message indicating this is the best match found"
-                                }
-                            },
-                            "required": ["url", "message"]
-                        }
-                    }
-                },
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "no_result_message",
-                        "description": "Inform the user when no relevant results could be found",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {}
                         }
                     }
                 }
@@ -227,15 +173,22 @@ Inform the user when no relevant results could be found.
                         
                         if function_name == "search_discourse":
                             if search_attempts >= self.max_search_attempts:
-                                # Force no result if max attempts reached
-                                logger.llm("Maximum search attempts reached, forcing no result message")
-                                final_response = self.response_config.get_error_message("no_results_found")
+                                # Stop searching if max attempts reached
+                                logger.llm("Maximum search attempts reached, stopping search")
                                 break
                                 
                             query = function_args.get("query", "")
                             logger.llm(f"Searching Discourse with query: '{query}'")
-                            search_results = await self.discourse_searcher.search(query)
-                            logger.llm(f"Discourse search returned {len(search_results)} results")
+                            
+                            try:
+                                search_results = await self.discourse_searcher.search(query, self.config.bot_max_search_results)
+                                logger.llm(f"Discourse search returned {len(search_results)} results")
+                            except DiscourseRateLimitError:
+                                logger.warning("Discourse rate limit hit during search")
+                                return self.response_config.get_error_message("rate_limit_error")
+                            except DiscourseConnectionError:
+                                logger.warning("Discourse connection error during search")
+                                return self.response_config.get_error_message("discourse_unreachable")
                             
                             # Format search results for the LLM
                             search_context = self._format_search_results(search_results)
@@ -271,35 +224,8 @@ Inform the user when no relevant results could be found.
                             
                             search_attempts += 1
                             logger.llm(f"Search context added to conversation, continuing to next LLM call")
-                            
-                        elif function_name == "send_link":
-                            url = function_args.get("url", "")
-                            message = function_args.get("message", "")
-                            
-                            logger.llm(f"LLM selected URL to send: {url}")
-                            logger.llm(f"LLM message: {message}")
-                            
-                            # Add UTM tags to the URL if configured
-                            url_with_utm = self.config.add_utm_tags_to_url(url)
-                            if url != url_with_utm:
-                                logger.llm(f"URL with UTM tags: {url_with_utm}")
-                            
-                            final_response = f"{message}\n\n{url_with_utm}"
-                            logger.llm(f"Final response prepared: {final_response}")
-                            break
-                            
-                        elif function_name == "no_result_message":
-                            logger.llm("LLM determined no relevant results found")
-                            final_response = self.response_config.get_error_message("no_results_found")
-                            logger.llm(f"No result message: {final_response}")
-                            break
                 
-                # Check if we have a final response
-                if final_response:
-                    logger.llm("Final response received, ending LLM interaction")
-                    break
-                
-                # If no tool calls and no final response, use the content
+                # If no tool calls and we have content, use it as final response
                 if message.content and not message.tool_calls:
                     final_response = message.content.strip()
                     logger.llm(f"Using LLM direct response: {final_response}")
@@ -312,21 +238,15 @@ Inform the user when no relevant results could be found.
                     logger.llm("LLM returned no tool calls and no content - this may cause fallback")
                     break
             
-            # Enhanced fallback logging with detailed reason tracking
+            # If no final response, provide a fallback
             if not final_response:
-                fallback_reason = None
-                if search_attempts >= self.max_search_attempts:
-                    fallback_reason = f"Maximum search attempts ({self.max_search_attempts}) reached without send_link or no_result_message"
-                elif tool_calls_executed:
-                    fallback_reason = "LLM executed tool calls but never called send_link or no_result_message"
+                if search_attempts > 0:
+                    # Had search results but LLM didn't provide good response
+                    final_response = "I searched the forum but couldn't find a good answer to your question. Please try rephrasing or visit the forum directly: https://discourse.aosus.org"
                 else:
-                    fallback_reason = "LLM provided no tool calls and no direct response"
+                    # No searches performed
+                    final_response = "I couldn't process your question. Please try again or visit the forum directly: https://discourse.aosus.org"
                 
-                # Log the specific reason for using fallback response
-                logger.llm(f"FALLBACK TRIGGERED - Reason: {fallback_reason}")
-                logger.llm(f"Debug state - search_attempts: {search_attempts}, max_attempts: {self.max_search_attempts}, tool_calls_executed: {tool_calls_executed}")
-                
-                final_response = self.response_config.get_error_message("fallback_error")
                 logger.llm(f"Using fallback response: {final_response}")
             
             # Log token usage
@@ -334,14 +254,16 @@ Inform the user when no relevant results could be found.
                 logger.llm(f"Token usage - prompt: {response.usage.prompt_tokens}, completion: {response.usage.completion_tokens}, total: {response.usage.total_tokens}")
             
             logger.llm(f"Question processing completed successfully")
+            
+            # Apply UTM tags to any URLs in the final response
+            final_response = self._add_utm_tags_to_response(final_response)
+            
             return final_response
             
         except Exception as e:
             logger.error(f"Error processing question with tools: {e}", exc_info=True)
             logger.llm(f"PROCESSING ERROR - Exception occurred: {type(e).__name__}: {e}")
-            processing_error_response = self.response_config.get_error_message("processing_error")
-            logger.llm(f"Using processing error response: {processing_error_response}")
-            return processing_error_response
+            return self.response_config.get_error_message("llm_down")
     
     def _format_search_results(self, search_results: List[DiscoursePost]) -> str:
         """Format search results for the LLM."""
@@ -358,6 +280,20 @@ Inform the user when no relevant results could be found.
             )
         
         return "\n".join(formatted_results)
+    
+    def _add_utm_tags_to_response(self, response: str) -> str:
+        """Add UTM tags to any URLs found in the response."""
+        import re
+        
+        # Find URLs in the response (basic regex for http/https URLs)
+        url_pattern = r'https?://[^\s<>"{}|\\^`[\]]*'
+        
+        def replace_url(match):
+            url = match.group(0)
+            return self.config.add_utm_tags_to_url(url)
+        
+        # Replace all URLs with UTM-tagged versions
+        return re.sub(url_pattern, replace_url, response)
     
     # Legacy method for backward compatibility
     async def generate_answer(self, question: str, search_results: List[DiscoursePost]) -> str:

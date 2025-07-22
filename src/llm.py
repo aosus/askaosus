@@ -312,16 +312,22 @@ Inform the user when no relevant results could be found.
                     logger.llm("LLM returned no tool calls and no content - this may cause fallback")
                     break
             
-            # Enhanced fallback logging
+            # Enhanced fallback logging with detailed reason tracking
             if not final_response:
+                fallback_reason = None
                 if search_attempts >= self.max_search_attempts:
-                    logger.llm(f"Using fallback response: Maximum search attempts ({self.max_search_attempts}) reached without send_link or no_result_message")
+                    fallback_reason = f"Maximum search attempts ({self.max_search_attempts}) reached without send_link or no_result_message"
                 elif tool_calls_executed:
-                    logger.llm("Using fallback response: LLM executed tool calls but never called send_link or no_result_message")
+                    fallback_reason = "LLM executed tool calls but never called send_link or no_result_message"
                 else:
-                    logger.llm("Using fallback response: LLM provided no tool calls and no direct response")
-                    
+                    fallback_reason = "LLM provided no tool calls and no direct response"
+                
+                # Log the specific reason for using fallback response
+                logger.llm(f"FALLBACK TRIGGERED - Reason: {fallback_reason}")
+                logger.llm(f"Debug state - search_attempts: {search_attempts}, max_attempts: {self.max_search_attempts}, tool_calls_executed: {tool_calls_executed}")
+                
                 final_response = self.response_config.get_error_message("fallback_error")
+                logger.llm(f"Using fallback response: {final_response}")
             
             # Log token usage
             if response and hasattr(response, 'usage') and response.usage:
@@ -332,8 +338,10 @@ Inform the user when no relevant results could be found.
             
         except Exception as e:
             logger.error(f"Error processing question with tools: {e}", exc_info=True)
-            logger.llm(f"LLM processing failed with error: {e}")
-            return self.response_config.get_error_message("processing_error")
+            logger.llm(f"PROCESSING ERROR - Exception occurred: {type(e).__name__}: {e}")
+            processing_error_response = self.response_config.get_error_message("processing_error")
+            logger.llm(f"Using processing error response: {processing_error_response}")
+            return processing_error_response
     
     def _format_search_results(self, search_results: List[DiscoursePost]) -> str:
         """Format search results for the LLM."""

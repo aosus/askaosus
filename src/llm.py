@@ -239,6 +239,14 @@ Inform the user when no relevant results could be found.
                             search_context = self._format_search_results(search_results)
                             logger.llm(f"Formatted search context length: {len(search_context)} characters")
                             
+                            # Log the search results being sent to the LLM
+                            if search_results:
+                                logger.llm("Search results sent to LLM:")
+                                for i, post in enumerate(search_results, 1):
+                                    logger.llm(f"  Result {i}: '{post.title}' - {post.url}")
+                            else:
+                                logger.llm("No search results to send to LLM")
+                            
                             messages.append({
                                 "role": "assistant",
                                 "content": "",

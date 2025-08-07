@@ -135,15 +135,24 @@ Search the Discourse forum for topics related to the user's query.
                 logger.llm(f"LLM attempt {search_attempts + 1}/{self.max_search_attempts}")
                 logger.llm(f"Sending {len(messages)} messages to LLM (model: {self.config.llm_model})")
                 
+                # Prepare request parameters
+                request_params = {
+                    "model": self.config.llm_model,
+                    "messages": messages,
+                    "tools": tools,
+                    "tool_choice": "auto",
+                    "max_tokens": self.config.llm_max_tokens,
+                    "temperature": self.config.llm_temperature,
+                }
+                
+                # Add OpenRouter provider configuration if available
+                openrouter_provider = self.config.get_openrouter_provider_config()
+                if openrouter_provider:
+                    request_params["provider"] = openrouter_provider
+                    logger.llm(f"Using OpenRouter provider config: {openrouter_provider}")
+                
                 # Call LLM with tools
-                response = await self.client.chat.completions.create(
-                    model=self.config.llm_model,
-                    messages=messages,
-                    tools=tools,
-                    tool_choice="auto",
-                    max_tokens=self.config.llm_max_tokens,
-                    temperature=self.config.llm_temperature,
-                )
+                response = await self.client.chat.completions.create(**request_params)
                 
                 message = response.choices[0].message
                 

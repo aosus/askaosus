@@ -6,7 +6,7 @@ Run this script to test the UTM tag feature without running the full bot.
 
 import os
 import sys
-sys.path.insert(0, '/app/src')
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from config import Config
 

@@ -4,10 +4,17 @@ from typing import List, Dict, Any, Optional
 
 from openai import OpenAI, AsyncOpenAI
 
-from .config import Config
-from .discourse import DiscoursePost, DiscourseSearcher, DiscourseRateLimitError, DiscourseConnectionError
-from .responses import ResponseConfig
-from .logging_utils import get_llm_logger, LLM_LEVEL
+try:
+    from .config import Config
+    from .discourse import DiscoursePost, DiscourseSearcher, DiscourseRateLimitError, DiscourseConnectionError
+    from .responses import ResponseConfig
+    from .logging_utils import get_llm_logger, LLM_LEVEL
+except ImportError:
+    # Fallback for direct execution
+    from config import Config
+    from discourse import DiscoursePost, DiscourseSearcher, DiscourseRateLimitError, DiscourseConnectionError
+    from responses import ResponseConfig
+    from logging_utils import get_llm_logger, LLM_LEVEL
 
 logger = get_llm_logger(__name__)
 
@@ -148,7 +155,7 @@ Search the Discourse forum for topics related to the user's query.
                 # Add OpenRouter provider configuration if available
                 openrouter_provider = self.config.get_openrouter_provider_config()
                 if openrouter_provider:
-                    request_params["provider"] = openrouter_provider
+                    request_params["extra_body"] = {"provider": openrouter_provider}
                     logger.llm(f"Using OpenRouter provider config: {openrouter_provider}")
                 
                 # Call LLM with tools

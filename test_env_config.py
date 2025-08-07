@@ -65,6 +65,10 @@ def test_env_config():
             assert config.llm_max_tokens == 500          # default
             assert config.llm_temperature == 0.7         # default
             
+            # Test OpenRouter defaults (should work even for openai provider)
+            assert config.openrouter_provider == ""      # default
+            assert config.openrouter_route == "best"     # default
+            
             print("✓ Default values applied correctly for optional variables")
             
             # Test OpenAI client kwargs

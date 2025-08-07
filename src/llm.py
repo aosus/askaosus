@@ -136,14 +136,22 @@ Search the Discourse forum for topics related to the user's query.
                 logger.llm(f"Sending {len(messages)} messages to LLM (model: {self.config.llm_model})")
                 
                 # Call LLM with tools
-                response = await self.client.chat.completions.create(
-                    model=self.config.llm_model,
-                    messages=messages,
-                    tools=tools,
-                    tool_choice="auto",
-                    max_tokens=self.config.llm_max_tokens,
-                    temperature=self.config.llm_temperature,
-                )
+                llm_kwargs = {
+                    "model": self.config.llm_model,
+                    "messages": messages,
+                    "tools": tools,
+                    "tool_choice": "auto",
+                    "max_tokens": self.config.llm_max_tokens,
+                    "temperature": self.config.llm_temperature,
+                }
+                
+                # Add OpenRouter-specific parameters if using OpenRouter
+                openrouter_params = self.config.get_openrouter_parameters()
+                if openrouter_params:
+                    llm_kwargs.update(openrouter_params)
+                    logger.llm(f"Added OpenRouter parameters: {openrouter_params}")
+                
+                response = await self.client.chat.completions.create(**llm_kwargs)
                 
                 message = response.choices[0].message
                 

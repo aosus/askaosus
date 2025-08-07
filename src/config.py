@@ -30,6 +30,10 @@ class Config:
         self.llm_max_tokens = int(os.getenv("LLM_MAX_TOKENS", "500"))
         self.llm_temperature = float(os.getenv("LLM_TEMPERATURE", "0.7"))
         
+        # OpenRouter specific configuration
+        self.openrouter_provider = os.getenv("OPENROUTER_PROVIDER", "").strip()
+        self.openrouter_route = os.getenv("OPENROUTER_ROUTE", "best").lower().strip()
+        
         # Bot behavior configuration
         # Bot mentions (comma-separated list)
         bot_mentions_str = os.getenv("BOT_MENTIONS", "@askaosus,askaosus")
@@ -69,6 +73,12 @@ class Config:
         if self.llm_provider not in valid_providers:
             raise ValueError(f"Invalid LLM_PROVIDER. Must be one of: {valid_providers}")
         
+        # Validate OpenRouter route if specified
+        if self.llm_provider == "openrouter" and self.openrouter_route:
+            valid_routes = {"best", "cheapest", "fastest"}
+            if self.openrouter_route not in valid_routes:
+                raise ValueError(f"Invalid OPENROUTER_ROUTE. Must be one of: {valid_routes}")
+        
         # Set default base URLs for providers if not specified
         if not self.llm_base_url:
             if self.llm_provider == "openai":
@@ -93,6 +103,9 @@ class Config:
         logger.info(f"  LLM provider: {self.llm_provider}")
         logger.info(f"  LLM base URL: {self.llm_base_url}")
         logger.info(f"  LLM model: {self.llm_model}")
+        if self.llm_provider == "openrouter":
+            logger.info(f"  OpenRouter provider: {self.openrouter_provider or 'auto'}")
+            logger.info(f"  OpenRouter route: {self.openrouter_route}")
         logger.info(f"  Bot debug mode: {self.bot_debug}")
         logger.info(f"  UTM tags configured: {'Yes' if self.utm_tags else 'No'}")
         logger.info(f"  Log level: {self.log_level}")
@@ -114,6 +127,23 @@ class Config:
             }
         
         return kwargs
+    
+    def get_openrouter_parameters(self) -> dict:
+        """Get OpenRouter-specific parameters for chat completion requests."""
+        if self.llm_provider != "openrouter":
+            return {}
+        
+        params = {}
+        
+        # Add provider selection if specified
+        if self.openrouter_provider:
+            params["provider"] = {"require": [self.openrouter_provider]}
+        
+        # Add route preference if specified
+        if self.openrouter_route and self.openrouter_route in {"best", "cheapest", "fastest"}:
+            params["route"] = self.openrouter_route
+        
+        return params
     
     def add_utm_tags_to_url(self, url: str) -> str:
         """Add UTM tags to a URL if configured."""

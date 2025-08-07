@@ -30,6 +30,10 @@ class Config:
         self.llm_max_tokens = int(os.getenv("LLM_MAX_TOKENS", "500"))
         self.llm_temperature = float(os.getenv("LLM_TEMPERATURE", "0.7"))
         
+        # OpenRouter-specific configuration
+        self.llm_openrouter_sorting = os.getenv("LLM_OPENROUTER_SORTING", "").lower()
+        self.llm_openrouter_provider = os.getenv("LLM_OPENROUTER_PROVIDER", "")
+        
         # Bot behavior configuration
         # Bot mentions (comma-separated list)
         bot_mentions_str = os.getenv("BOT_MENTIONS", "@askaosus,askaosus")
@@ -83,6 +87,12 @@ class Config:
         if not parsed.scheme or not parsed.netloc:
             raise ValueError("Invalid DISCOURSE_BASE_URL")
         
+        # Validate OpenRouter configuration
+        if self.llm_openrouter_sorting:
+            valid_sorting_options = {"throughput", "latency", "price"}
+            if self.llm_openrouter_sorting not in valid_sorting_options:
+                raise ValueError(f"Invalid LLM_OPENROUTER_SORTING. Must be one of: {valid_sorting_options}")
+        
         # Log configuration (without sensitive data)
         import logging
         logger = logging.getLogger(__name__)
@@ -93,6 +103,9 @@ class Config:
         logger.info(f"  LLM provider: {self.llm_provider}")
         logger.info(f"  LLM base URL: {self.llm_base_url}")
         logger.info(f"  LLM model: {self.llm_model}")
+        if self.llm_provider == "openrouter":
+            logger.info(f"  OpenRouter sorting: {self.llm_openrouter_sorting if self.llm_openrouter_sorting else 'default'}")
+            logger.info(f"  OpenRouter provider: {self.llm_openrouter_provider if self.llm_openrouter_provider else 'auto'}")
         logger.info(f"  Bot debug mode: {self.bot_debug}")
         logger.info(f"  UTM tags configured: {'Yes' if self.utm_tags else 'No'}")
         logger.info(f"  Log level: {self.log_level}")
@@ -114,6 +127,24 @@ class Config:
             }
         
         return kwargs
+    
+    def get_openrouter_provider_config(self) -> Optional[dict]:
+        """Get OpenRouter provider configuration for API requests."""
+        if self.llm_provider != "openrouter":
+            return None
+            
+        provider_config = {}
+        
+        # Handle manual provider selection (takes precedence)
+        if self.llm_openrouter_provider:
+            provider_config["order"] = [self.llm_openrouter_provider]
+        # Handle sorting preference  
+        elif self.llm_openrouter_sorting:
+            # Use sorting preference as a routing modifier
+            # OpenRouter uses modifiers like :throughput, :latency, :price
+            provider_config["order"] = [f"auto:{self.llm_openrouter_sorting}"]
+        
+        return provider_config if provider_config else None
     
     def add_utm_tags_to_url(self, url: str) -> str:
         """Add UTM tags to a URL if configured."""

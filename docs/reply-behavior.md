@@ -14,11 +14,20 @@ Set the `BOT_REPLY_BEHAVIOR` environment variable to one of the following values
 - `mention` - Only respond to replies that also mention the bot (default)
 - `watch` - Watch all replies to bot messages regardless of mentions
 
+### Thread Depth Configuration
+
+Set the `BOT_THREAD_DEPTH_LIMIT` environment variable to control how many messages the bot collects from reply threads in `watch` mode:
+
+- Default: `6` messages
+- Range: `1` to `20` messages (to prevent excessive API calls)
+- Only applies in `watch` mode
+
 ### Example Configuration
 
 ```bash
 # In your .env file or environment
 BOT_REPLY_BEHAVIOR=watch
+BOT_THREAD_DEPTH_LIMIT=10  # Collect up to 10 messages in thread history
 ```
 
 ## Behavior Modes
@@ -52,23 +61,41 @@ User2: @askaosus can you explain step 3? -> Bot responds (has mention)
 
 ### `watch` Mode
 
-When set to `watch`, the bot will respond to all replies to its own messages, regardless of whether the reply mentions the bot.
+When set to `watch`, the bot will respond to all replies to its own messages, regardless of whether the reply mentions the bot. In this mode, the bot also provides **full thread context** by collecting up to `BOT_THREAD_DEPTH_LIMIT` messages from the reply chain.
 
-**Use case:** Interactive help sessions where natural conversation flow is desired.
+**Use case:** Interactive help sessions where natural conversation flow is desired with complete context understanding.
+
+**Thread Context Features:**
+- Automatically traverses reply threads up to the configured depth limit
+- Collects messages in chronological order (oldest first)  
+- Identifies which messages are from the bot vs users
+- Provides complete conversation history to the LLM
 
 **Example:**
 ```
 User1: @askaosus how do I install Ubuntu?
-Bot: Here's how to install Ubuntu... [detailed response]
-User2: what about step 3? -> Bot responds (reply to bot message)
-User2: thanks! -> Bot responds (reply to bot message)
+Bot: Here's how to install Ubuntu step by step...
+User1: what about step 3? -> Bot responds with full thread context
+User2: thanks! -> Bot responds with full thread context  
+User1: can you explain the partitioning part? -> Bot responds with thread context
+```
+
+**Thread Context Format:**
+```
+Message 1 (User): how do I install Ubuntu?
+
+Message 2 (Bot): Here's how to install Ubuntu step by step...
+
+Message 3 (User): what about step 3?
+
+Current reply: can you explain the partitioning part?
 ```
 
 ## Reply Context Handling
 
-### Thread Context
+### Single Message Context (`ignore` and `mention` modes)
 
-When the bot processes a reply, it automatically includes the context of the original message to provide better assistance:
+When the bot processes a reply in `ignore` or `mention` modes, it includes the context of the immediate parent message:
 
 ```
 Original message: How do I install Ubuntu?
@@ -76,7 +103,38 @@ Original message: How do I install Ubuntu?
 Reply: what about step 3?
 ```
 
-The bot receives both messages as context, enabling more coherent responses.
+### Thread Context (`watch` mode)
+
+When the bot processes a reply in `watch` mode, it automatically collects the **complete thread history** up to the configured depth limit:
+
+```
+Message 1 (User): How do I install Ubuntu?
+
+Message 2 (Bot): Here's how to install Ubuntu step by step...
+
+Message 3 (User): what about step 3?
+
+Message 4 (Bot): Step 3 involves partitioning...
+
+Current reply: can you explain the partitioning part?
+```
+
+#### Thread Traversal
+
+The bot follows the Matrix reply chain (`m.relates_to.m.in_reply_to.event_id`) backwards through the conversation:
+
+1. Starts from the current reply message
+2. Follows reply relationships up the thread
+3. Collects up to `BOT_THREAD_DEPTH_LIMIT` messages  
+4. Returns messages in chronological order (oldest first)
+5. Identifies bot vs user messages for proper context labeling
+
+#### Benefits of Thread Context
+
+- **Complete Conversation Understanding**: LLM sees the full discussion history
+- **Better Continuity**: References to previous messages are understood
+- **Improved Relevance**: Answers can build upon the entire conversation
+- **Natural Flow**: Users can refer to earlier messages without re-explaining
 
 ### Content Cleaning
 
@@ -130,6 +188,38 @@ The default behavior (`mention`) maintains backward compatibility - the bot stil
 
 No configuration changes are required. The bot defaults to `mention` mode, which preserves the existing behavior while providing better context handling.
 
+## Performance Considerations
+
+### Thread Context Collection
+
+In `watch` mode, the bot makes additional Matrix API calls to collect thread history:
+
+- **API Calls**: Up to `BOT_THREAD_DEPTH_LIMIT` calls to `room_get_event` 
+- **Rate Limiting**: Respects Matrix rate limits automatically
+- **Fallback**: If thread collection fails, falls back to single message context
+- **Caching**: Matrix client handles response caching
+
+### Configuration Recommendations
+
+**For low-traffic rooms or detailed conversations:**
+```bash
+BOT_REPLY_BEHAVIOR=watch
+BOT_THREAD_DEPTH_LIMIT=10
+```
+
+**For high-traffic rooms or simple interactions:**
+```bash
+BOT_REPLY_BEHAVIOR=mention
+BOT_THREAD_DEPTH_LIMIT=3  # Not used in mention mode, but good default
+```
+
+**For minimal bot interaction:**
+```bash
+BOT_REPLY_BEHAVIOR=ignore
+```
+
+## Troubleshooting
+
 ## Troubleshooting
 
 ### Bot Not Responding to Replies
@@ -137,17 +227,37 @@ No configuration changes are required. The bot defaults to `mention` mode, which
 1. Check the `BOT_REPLY_BEHAVIOR` setting
 2. Ensure replies are properly formatted by the Matrix client
 3. Verify the original message was from the bot (for `watch` and `mention` modes)
+4. Check bot logs for thread collection errors
 
 ### Bot Responding Too Frequently
 
 - Consider switching from `watch` to `mention` or `ignore` mode
+- Reduce `BOT_THREAD_DEPTH_LIMIT` to minimize API calls
 - Check if multiple bot mentions exist in the configuration
 
-### Context Not Included
+### Context Not Included or Incomplete
 
-The bot automatically includes context for all replies. If context is missing:
+**Single message context issues:**
 - Check Matrix client reply formatting
 - Verify the original message is accessible to the bot
+
+**Thread context issues (watch mode):**
+- Check `BOT_THREAD_DEPTH_LIMIT` configuration
+- Review bot logs for Matrix API errors during thread collection
+- Verify the bot has access to read message history in the room
+- Check if thread depth limit is being reached (increase if needed)
+
+### Performance Issues
+
+**High API usage in watch mode:**
+- Reduce `BOT_THREAD_DEPTH_LIMIT` to 3-6 messages
+- Consider switching to `mention` mode for high-traffic rooms
+- Monitor Matrix API rate limiting in bot logs
+
+**Thread collection timeouts:**
+- Check Matrix homeserver performance
+- Review network connectivity to Matrix server
+- Verify room message history is accessible
 
 ## Examples
 
@@ -156,16 +266,25 @@ The bot automatically includes context for all replies. If context is missing:
 **Minimal bot interaction:**
 ```bash
 BOT_REPLY_BEHAVIOR=ignore
+# BOT_THREAD_DEPTH_LIMIT not used in ignore mode
 ```
 
 **Balanced interaction (default):**
 ```bash
 BOT_REPLY_BEHAVIOR=mention
+# BOT_THREAD_DEPTH_LIMIT not used in mention mode (single message context)
 ```
 
-**Maximum helpfulness:**
+**Maximum helpfulness with thread context:**
 ```bash
 BOT_REPLY_BEHAVIOR=watch
+BOT_THREAD_DEPTH_LIMIT=6  # Collect up to 6 messages in thread
+```
+
+**High-traffic room optimization:**
+```bash
+BOT_REPLY_BEHAVIOR=watch  
+BOT_THREAD_DEPTH_LIMIT=3  # Reduce API calls, still provide thread context
 ```
 
 ### Conversation Examples

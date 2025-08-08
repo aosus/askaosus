@@ -46,6 +46,9 @@ class Config:
         # Reply behavior configuration
         self.bot_reply_behavior = os.getenv("BOT_REPLY_BEHAVIOR", "mention").lower()
         
+        # Thread depth configuration (only applies in watch mode)
+        self.bot_thread_depth_limit = int(os.getenv("BOT_THREAD_DEPTH_LIMIT", "6"))
+        
         # UTM tracking configuration
         self.utm_tags = os.getenv("BOT_UTM_TAGS", "")
         
@@ -101,6 +104,12 @@ class Config:
         if self.bot_reply_behavior not in valid_reply_behaviors:
             raise ValueError(f"Invalid BOT_REPLY_BEHAVIOR. Must be one of: {valid_reply_behaviors}")
         
+        # Validate thread depth limit
+        if self.bot_thread_depth_limit < 1:
+            raise ValueError("BOT_THREAD_DEPTH_LIMIT must be at least 1")
+        elif self.bot_thread_depth_limit > 20:
+            raise ValueError("BOT_THREAD_DEPTH_LIMIT must not exceed 20 to prevent excessive API calls")
+        
         # Log configuration (without sensitive data)
         import logging
         logger = logging.getLogger(__name__)
@@ -116,6 +125,7 @@ class Config:
             logger.info(f"  OpenRouter provider: {self.llm_openrouter_provider if self.llm_openrouter_provider else 'auto'}")
         logger.info(f"  Bot debug mode: {self.bot_debug}")
         logger.info(f"  Bot reply behavior: {self.bot_reply_behavior}")
+        logger.info(f"  Bot thread depth limit: {self.bot_thread_depth_limit}")
         logger.info(f"  UTM tags configured: {'Yes' if self.utm_tags else 'No'}")
         logger.info(f"  Log level: {self.log_level}")
         logger.info(f"  LLM log level: {self.llm_log_level}")

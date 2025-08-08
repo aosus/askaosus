@@ -295,6 +295,69 @@ class AskaosusBot:
             except:
                 pass
     
+    async def _get_thread_context(self, room: MatrixRoom, event_id: str, max_depth: int = 6) -> list:
+        """
+        Traverse a reply thread up to a specified depth and collect message context.
+        
+        Args:
+            room: The Matrix room
+            event_id: The event ID to start traversal from
+            max_depth: Maximum number of messages to collect
+            
+        Returns:
+            List of message contents in chronological order (oldest first)
+        """
+        thread_messages = []
+        current_event_id = event_id
+        depth = 0
+        
+        while current_event_id and depth < max_depth:
+            try:
+                logger.debug(f"Fetching thread message {depth + 1}/{max_depth}: {current_event_id}")
+                response = await self.matrix_client.room_get_event(room.room_id, current_event_id)
+                
+                if not isinstance(response, RoomGetEventResponse):
+                    logger.warning(f"Failed to fetch thread message {current_event_id}: {response}")
+                    break
+                
+                event = response.event
+                
+                # Process the message content
+                if isinstance(event, RoomMessageText):
+                    content = event.body
+                else:
+                    event_type = type(event).__name__
+                    content = f"[{event_type} - content not accessible as text]"
+                
+                # Add to thread messages (we'll reverse later for chronological order)
+                thread_messages.append({
+                    'content': content,
+                    'event_id': current_event_id,
+                    'sender': getattr(event, 'sender', 'unknown'),
+                    'is_bot_message': current_event_id in self.bot_message_ids
+                })
+                
+                depth += 1
+                
+                # Check if this message is also a reply
+                next_event_id = None
+                if hasattr(event, 'source') and 'content' in event.source:
+                    content_data = event.source['content']
+                    if 'm.relates_to' in content_data and 'm.in_reply_to' in content_data['m.relates_to']:
+                        next_event_id = content_data['m.relates_to']['m.in_reply_to']['event_id']
+                
+                current_event_id = next_event_id
+                
+            except Exception as e:
+                logger.warning(f"Error fetching thread message {current_event_id}: {e}")
+                break
+        
+        # Reverse to get chronological order (oldest first)
+        thread_messages.reverse()
+        
+        logger.debug(f"Collected {len(thread_messages)} messages in thread")
+        return thread_messages
+    
     async def _should_respond(self, room: MatrixRoom, event: RoomMessageText) -> Tuple[Optional[str], bool, Optional[str]]:
         """
         Determine if the bot should respond to a message and extract the question.
@@ -366,17 +429,52 @@ class AskaosusBot:
             
             elif reply_behavior == "watch":
                 # Respond to all replies to bot messages regardless of mentions
+                # In watch mode, use thread context to provide full conversation history
                 pass  # Fall through to process the reply
             
             # Clean up the message body by removing Matrix reply formatting
             cleaned_body = self._clean_reply_content(message_body, bot_mentions)
             
-            # Prepare context with original and reply messages
-            if replied_to_content is None:
-                replied_to_content = "[Original message could not be retrieved]"
+            # Prepare context based on reply behavior
+            if reply_behavior == "watch":
+                # In watch mode, get full thread context
+                try:
+                    logger.info(f"Collecting thread context (up to {self.config.bot_thread_depth_limit} messages)")
+                    thread_messages = await self._get_thread_context(room, original_event_id, self.config.bot_thread_depth_limit)
+                    
+                    if thread_messages:
+                        # Format thread context with chronological messages
+                        context_parts = []
+                        for i, msg in enumerate(thread_messages):
+                            sender_label = "Bot" if msg['is_bot_message'] else "User"
+                            context_parts.append(f"Message {i+1} ({sender_label}): {msg['content']}")
+                        
+                        # Add the current reply at the end
+                        context_parts.append(f"Current reply: {cleaned_body}")
+                        
+                        full_context = "\n\n".join(context_parts)
+                        logger.info(f"Processing reply with {len(thread_messages)} thread messages as context")
+                    else:
+                        # Fallback to single message context if thread collection failed
+                        if replied_to_content is None:
+                            replied_to_content = "[Original message could not be retrieved]"
+                        full_context = f"Original message: {replied_to_content}\n\nReply: {cleaned_body}"
+                        logger.info("Using fallback single message context")
+                        
+                except Exception as e:
+                    logger.warning(f"Failed to collect thread context: {e}")
+                    # Fallback to single message context
+                    if replied_to_content is None:
+                        replied_to_content = "[Original message could not be retrieved]"
+                    full_context = f"Original message: {replied_to_content}\n\nReply: {cleaned_body}"
+                    logger.info("Using fallback single message context due to thread collection error")
+            else:
+                # For mention mode, use single message context (original behavior)
+                if replied_to_content is None:
+                    replied_to_content = "[Original message could not be retrieved]"
+                full_context = f"Original message: {replied_to_content}\n\nReply: {cleaned_body}"
+                logger.info("Processing reply to bot message with single message context")
             
-            full_context = f"Original message: {replied_to_content}\n\nReply: {cleaned_body}"
-            logger.info("Processing reply to bot message with context")
             return full_context, True, event.event_id
         
         # Case 2: This is a reply to a non-bot message

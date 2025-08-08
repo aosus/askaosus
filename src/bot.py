@@ -291,48 +291,103 @@ class AskaosusBot:
         message_lower = message_body.lower()
         mentioned = any(mention in message_lower for mention in bot_mentions)
         
+        # Check if this is a reply to another message using Matrix's formatted output
+        replied_to_content = None
+        is_reply = False
+        
+        if hasattr(event, 'source') and 'content' in event.source:
+            content = event.source['content']
+            if 'm.relates_to' in content and 'm.in_reply_to' in content['m.relates_to']:
+                is_reply = True
+                original_event_id = content['m.relates_to']['m.in_reply_to']['event_id']
+                
+                # Always attempt to fetch the original message for context
+                try:
+                    logger.debug(f"Fetching replied-to message: {original_event_id}")
+                    original_response = await self.matrix_client.room_get_event(room.room_id, original_event_id)
+                    
+                    # Check if the response is successful and contains a message event
+                    if isinstance(original_response, RoomGetEventResponse):
+                        original_event = original_response.event
+                        # Handle different types of events
+                        if isinstance(original_event, RoomMessageText):
+                            replied_to_content = original_event.body
+                            logger.debug(f"Retrieved replied-to message content: {replied_to_content[:100]}...")
+                        else:
+                            # Handle non-text events (images, files, etc.)
+                            event_type = type(original_event).__name__
+                            replied_to_content = f"[{event_type} - content not accessible as text]"
+                            logger.debug(f"Original event is not a text message: {event_type}")
+                    else:
+                        logger.warning(f"Failed to fetch original message {original_event_id}: {original_response}")
+                        replied_to_content = "[Original message could not be retrieved]"
+                except Exception as e:
+                    logger.warning(f"Error fetching replied-to message: {e}")
+                    replied_to_content = "[Original message could not be retrieved]"
+        
+        # Apply reply behavior configuration
+        reply_behavior = self.config.bot_reply_behavior
+        
+        # Handle different reply behaviors
+        if is_reply:
+            logger.debug(f"Processing reply with behavior '{reply_behavior}', mentioned: {mentioned}")
+            
+            if reply_behavior == "ignore":
+                # Ignore all replies completely, regardless of mentions
+                logger.debug("Ignoring reply due to 'ignore' behavior setting")
+                return None, False
+            elif reply_behavior == "mention":
+                # Only process replies that mention the bot (current behavior)
+                if not mentioned:
+                    logger.debug("Ignoring reply without mention due to 'mention' behavior setting")
+                    return None, False
+            elif reply_behavior == "watch":
+                # Process all replies, regardless of mentions
+                logger.debug("Processing reply due to 'watch' behavior setting")
+                # For replies without mentions, use the full message as the question
+                if not mentioned:
+                    question = message_body
+                else:
+                    # Remove mentions from the message to get the question
+                    question = message_body
+                    for mention in bot_mentions:
+                        # Use a more flexible regex that handles @ symbols properly
+                        if mention.startswith('@'):
+                            # For mentions that start with @, match the exact mention
+                            pattern = rf'\s*{re.escape(mention)}\s*'
+                        else:
+                            # For mentions without @, use word boundaries
+                            pattern = rf'\s*\b{re.escape(mention)}\b\s*'
+                        question = re.sub(pattern, ' ', question, flags=re.IGNORECASE)
+                    question = question.strip()
+                
+                # Ensure we have some context, even if fetching failed
+                if replied_to_content is None:
+                    replied_to_content = "[Original message could not be retrieved]"
+                
+                # Create context string with both messages
+                full_context = f"Original message: {replied_to_content}\n\nReply: {question}"
+                logger.info("Including replied-to message as context for better understanding")
+                return full_context, True
+            
+            # For reply_behavior == "mention", continue with normal mention processing below
+        
+        # Process mentions (both regular mentions and replies with mentions when behavior allows)
         if mentioned:
             # Remove the mention from the message to get the question
             question = message_body
             for mention in bot_mentions:
-                question = re.sub(rf"\b{re.escape(mention)}\b", "", question, flags=re.IGNORECASE)
+                # Use a more flexible regex that handles @ symbols properly
+                if mention.startswith('@'):
+                    # For mentions that start with @, match the exact mention
+                    pattern = rf'\s*{re.escape(mention)}\s*'
+                else:
+                    # For mentions without @, use word boundaries
+                    pattern = rf'\s*\b{re.escape(mention)}\b\s*'
+                question = re.sub(pattern, ' ', question, flags=re.IGNORECASE)
             question = question.strip()
             
-            # Check if this is a reply to another message
-            replied_to_content = None
-            is_reply = False
-            
-            if hasattr(event, 'source') and 'content' in event.source:
-                content = event.source['content']
-                if 'm.relates_to' in content and 'm.in_reply_to' in content['m.relates_to']:
-                    is_reply = True
-                    original_event_id = content['m.relates_to']['m.in_reply_to']['event_id']
-                    
-                    # Always attempt to fetch the original message for context
-                    try:
-                        logger.debug(f"Fetching replied-to message: {original_event_id}")
-                        original_response = await self.matrix_client.room_get_event(room.room_id, original_event_id)
-                        
-                        # Check if the response is successful and contains a message event
-                        if isinstance(original_response, RoomGetEventResponse):
-                            original_event = original_response.event
-                            # Handle different types of events
-                            if isinstance(original_event, RoomMessageText):
-                                replied_to_content = original_event.body
-                                logger.debug(f"Retrieved replied-to message content: {replied_to_content[:100]}...")
-                            else:
-                                # Handle non-text events (images, files, etc.)
-                                event_type = type(original_event).__name__
-                                replied_to_content = f"[{event_type} - content not accessible as text]"
-                                logger.debug(f"Original event is not a text message: {event_type}")
-                        else:
-                            logger.warning(f"Failed to fetch original message {original_event_id}: {original_response}")
-                            replied_to_content = "[Original message could not be retrieved]"
-                    except Exception as e:
-                        logger.warning(f"Error fetching replied-to message: {e}")
-                        replied_to_content = "[Original message could not be retrieved]"
-            
-            # Always provide context when this is a reply, even if fetching failed
+            # If this is a reply and we have context, include it
             if is_reply:
                 # Ensure we have some context, even if fetching failed
                 if replied_to_content is None:

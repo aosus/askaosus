@@ -538,19 +538,26 @@ class AskaosusBot:
         if event and hasattr(event, 'formatted_body') and event.formatted_body:
             # Use formatted_body but strip HTML tags for text-based mention detection
             import re
-            # Simple HTML tag removal - convert <br> to newlines and remove other tags
-            formatted_content = event.formatted_body
-            formatted_content = re.sub(r'<br\s*/?>', '\n', formatted_content, flags=re.IGNORECASE)
-            formatted_content = re.sub(r'<[^>]+>', '', formatted_content)
-            # Decode HTML entities
-            import html
-            formatted_content = html.unescape(formatted_content).strip()
-            
-            if formatted_content:
-                content_to_check = formatted_content
-                logger.debug(f"Using formatted_body for mention detection: {len(formatted_content)} chars")
-            else:
-                logger.debug("formatted_body was empty, falling back to body")
+            try:
+                formatted_content = event.formatted_body
+                # Handle <br> tags first
+                formatted_content = re.sub(r'<br\s*/?>', '\n', formatted_content, flags=re.IGNORECASE)
+                
+                # Remove HTML tags more carefully to avoid removing content between broken tags
+                # Use a better regex that doesn't span across < and > characters  
+                formatted_content = re.sub(r'<[^<>]*>', '', formatted_content)
+                
+                # Decode HTML entities
+                import html
+                formatted_content = html.unescape(formatted_content).strip()
+                
+                if formatted_content:
+                    content_to_check = formatted_content
+                    logger.debug(f"Using formatted_body for mention detection: {len(formatted_content)} chars")
+                else:
+                    logger.debug("formatted_body was empty after processing, falling back to body")
+            except Exception as e:
+                logger.debug(f"Error processing formatted_body: {e}, falling back to body")
         else:
             logger.debug("No formatted_body available, using raw body with quote filtering")
         
@@ -566,7 +573,26 @@ class AskaosusBot:
         
         # Check for mentions in the cleaned content only
         content_lower = content_to_check.lower()
-        mentioned = any(mention.lower() in content_lower for mention in bot_mentions)
+        
+        # Use word boundary checks for more accurate matching
+        mentioned = False
+        for mention in bot_mentions:
+            mention_lower = mention.lower()
+            # For @mentions, look for the exact mention
+            if mention.startswith('@'):
+                # Match @mention as whole word or at word boundaries
+                import re
+                pattern = rf'\b{re.escape(mention_lower)}\b'
+                if re.search(pattern, content_lower):
+                    mentioned = True
+                    break
+            else:
+                # For mentions without @, ensure word boundaries
+                import re
+                pattern = rf'\b{re.escape(mention_lower)}\b'
+                if re.search(pattern, content_lower):
+                    mentioned = True
+                    break
         
         logger.debug(f"Mention detection: original_length={len(message_body)}, "
                     f"content_length={len(content_to_check)}, mentioned={mentioned}")

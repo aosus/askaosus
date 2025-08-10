@@ -369,8 +369,8 @@ class AskaosusBot:
         bot_mentions = self.config.bot_mentions
         
         # Check if the message mentions the bot
-        message_lower = message_body.lower()
-        mentioned = any(mention.lower() in message_lower for mention in bot_mentions)
+        # Use formatted body that excludes replied-to content, or clean quoted lines from raw body
+        mentioned = self._check_message_mentions_bot(message_body, bot_mentions, event)
         
         # Check if this is a reply to another message
         is_reply = False
@@ -512,6 +512,66 @@ class AskaosusBot:
         
         # Default: don't respond
         return None, False, None
+    
+    def _check_message_mentions_bot(self, message_body: str, bot_mentions: list, event: RoomMessageText = None) -> bool:
+        """
+        Check if a message mentions the bot, excluding quoted content.
+        
+        This method ensures that only direct mentions in the actual message content
+        are detected, not mentions that appear in quoted/replied-to content.
+        
+        Matrix clients typically include quoted content in the 'body' field but 
+        exclude it from the 'formatted_body' field for replies. We prefer
+        formatted_body when available.
+        
+        Args:
+            message_body: The raw message body
+            bot_mentions: List of bot mention strings to check for
+            event: The Matrix event (optional, for accessing formatted_body)
+            
+        Returns:
+            True if the message directly mentions the bot (not in quoted content)
+        """
+        # Prefer formatted_body if available, as it excludes replied-to content  
+        content_to_check = message_body
+        
+        if event and hasattr(event, 'formatted_body') and event.formatted_body:
+            # Use formatted_body but strip HTML tags for text-based mention detection
+            import re
+            # Simple HTML tag removal - convert <br> to newlines and remove other tags
+            formatted_content = event.formatted_body
+            formatted_content = re.sub(r'<br\s*/?>', '\n', formatted_content, flags=re.IGNORECASE)
+            formatted_content = re.sub(r'<[^>]+>', '', formatted_content)
+            # Decode HTML entities
+            import html
+            formatted_content = html.unescape(formatted_content).strip()
+            
+            if formatted_content:
+                content_to_check = formatted_content
+                logger.debug(f"Using formatted_body for mention detection: {len(formatted_content)} chars")
+            else:
+                logger.debug("formatted_body was empty, falling back to body")
+        else:
+            logger.debug("No formatted_body available, using raw body with quote filtering")
+        
+        # If we're using raw body, remove quoted lines (fallback for clients that don't use formatted_body)
+        if content_to_check == message_body:
+            lines = message_body.split('\n')
+            non_quote_lines = []
+            for line in lines:
+                # Skip lines that are Matrix quote replies (fallback formatting)
+                if not line.strip().startswith('> '):
+                    non_quote_lines.append(line)
+            content_to_check = '\n'.join(non_quote_lines).strip()
+        
+        # Check for mentions in the cleaned content only
+        content_lower = content_to_check.lower()
+        mentioned = any(mention.lower() in content_lower for mention in bot_mentions)
+        
+        logger.debug(f"Mention detection: original_length={len(message_body)}, "
+                    f"content_length={len(content_to_check)}, mentioned={mentioned}")
+        
+        return mentioned
     
     def _clean_reply_content(self, message_body: str, bot_mentions: list) -> str:
         """
